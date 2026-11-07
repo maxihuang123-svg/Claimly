@@ -22,6 +22,7 @@ const STATIC_FILES = {
   '/': ['index.html', 'text/html; charset=utf-8'],
   '/measurement.js': ['measurement.js', 'text/javascript; charset=utf-8'],
   '/validation.js': ['validation.js', 'text/javascript; charset=utf-8'],
+  '/labels.js': ['labels.js', 'text/javascript; charset=utf-8'],
   '/app.js': ['app.js', 'text/javascript; charset=utf-8'],
   '/styles.css': ['styles.css', 'text/css; charset=utf-8'],
 };
@@ -268,7 +269,7 @@ async function route(request, response) {
     const body = await readJson(request);
     const candidate = selectedPolicy(body.candidate);
     if (body.token !== validation.labelSetup(candidate).token) {
-      throw new PolicyError('The policy or labels changed. Reload the validation tab before saving labels.');
+      throw new PolicyError('The policy or labels changed. Reload the page before saving expected answers.');
     }
     validation.saveLabels(candidate, body.expected);
     sendJson(response, 201, validation.labelSetup(candidate));

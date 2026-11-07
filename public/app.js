@@ -1,5 +1,6 @@
 import { createMeasurementUI } from './measurement.js';
 import { createValidationUI } from './validation.js';
+import { createLabelsUI } from './labels.js';
 const OUTCOMES = {
   routine_processing: { name: 'Routine processing', action: 'Send to routine processing.' },
   request_information: { name: 'Request information', action: 'Request information.' },
@@ -16,6 +17,7 @@ const ICONS = {
   arrow: svg('<path d="M2.5 8h11M9.5 4l4 4-4 4"/>', 1.5),
   table: svg('<path d="M2.5 3.5h11v9h-11zM2.5 6.5h11M6.5 6.5v6"/>', 1.5),
   document: svg('<path d="M4 2.5h5.5L12.5 5.5v8H4zM6.5 8h4M6.5 10.5h4"/>', 1.5),
+  tag: svg('<path d="M2.5 2.5h5.2l5.8 5.8-5.2 5.2-5.8-5.8zM5.5 5.5h.01"/>', 1.5),
 };
 const STATE_LABELS = {
   pass: [ICONS.check, 'OK'],
@@ -28,6 +30,7 @@ const PAGES = [
   { id: 'claims', label: 'Claims review', icon: ICONS.table, render: renderClaims },
   { id: 'policies', label: 'Policies', icon: ICONS.document, render: renderPolicies },
   { id: 'measurement', label: 'Measurement', icon: ICONS.flag, render: () => measurementUI.render() },
+  { id: 'labels', label: 'Expected answers', icon: ICONS.tag, render: () => labelsUI.render() },
   { id: 'validation', label: 'Validation', icon: ICONS.check, render: () => validationUI.render() },
 ];
 
@@ -221,7 +224,6 @@ function renderReviewPopup(item) {
     <header class="popup-head"><div><h2 id="review-title">Review ${escapeHtml(item.case.case_id)}</h2>
       <p class="notice">${escapeHtml(item.case.claim_summary)}</p></div>
       <button type="button" class="button" data-close-review aria-label="Close review">Close</button></header>
-    ${item.needs_recheck ? `<p class="validation-alert">Policy ${escapeHtml(item.automated.policy_version)} requires another look. ${escapeHtml(item.automated.explanation)}${item.retained_review ? ` Previous review by ${escapeHtml(item.retained_review.reviewer)}: ${outcomeName(item.retained_review.final_recommendation)}. Preserved in history.` : ''}</p>` : ''}
     <div class="review-original">
       <span class="review-label">System recommendation</span>
       <div><span class="pill" data-outcome="${item.automated.recommendation}">${outcomeName(item.automated.recommendation)}</span><span class="notice">Policy ${escapeHtml(item.automated.policy_version)}</span></div>
@@ -796,11 +798,13 @@ async function loadPolicies() {
 }
 
 function goToPage(id) {
+  if (state.pageId === 'labels' && id !== 'labels' && labelsUI.dirty() && !confirm('Discard unsaved expected answers?')) return;
   state.pageId = id;
   renderNav();
   if (id === 'policies') loadPolicies();
   else if (id === 'measurement') measurementUI.load();
   else if (id === 'validation') validationUI.load();
+  else if (id === 'labels') labelsUI.load();
   else render();
 }
 
@@ -1009,6 +1013,13 @@ const validationUI = createValidationUI({
   onActivated: (data) => { state.openPolicy = data.current_version; applyPolicies(data); state.policyEditing = false; showToast(`${data.current_version} activated. Affected open claims are ready for review.`); },
   onClaims: () => { state.pageId = 'claims'; state.filter = 'recheck'; start(); },
   onPolicies: () => { state.policyEditing = true; goToPage('policies'); },
+  onLabels: (policy) => { state.pageId = 'labels'; renderNav(); labelsUI.load(policy); },
 });
+
+const labelsUI = createLabelsUI({
+  root: dom.page, active: () => state.pageId === 'labels', request: postJson, flush: flushDraft,
+  onValidation: (policy) => { state.pageId = 'validation'; renderNav(); validationUI.load(false, policy); },
+});
+window.addEventListener('beforeunload', (event) => { if (labelsUI.dirty()) event.preventDefault(); });
 
 start();

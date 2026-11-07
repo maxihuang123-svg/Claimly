@@ -5,8 +5,8 @@ const time = (value) => new Date(value).toLocaleString([], { dateStyle: 'medium'
 const arrow = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M4 12h16m-6-6 6 6-6 6"/></svg>';
 const versionName = (version) => version === 'draft' ? 'Draft' : `Policy ${version}`;
 
-export function createValidationUI({ root, active, request, flush, onActivated, onClaims, onPolicies }) {
-  const state = { data: null, baseline: null, candidate: null, busy: false, error: null, reviewer: '', filter: 'changed', transition: null, expanded: null, expected: null, labelsDirty: false, labelsOpen: false, notice: null };
+export function createValidationUI({ root, active, request, flush, onActivated, onClaims, onPolicies, onLabels }) {
+  const state = { data: null, baseline: null, candidate: null, busy: false, error: null, reviewer: '', filter: 'changed', transition: null, expanded: null };
   let generation = 0;
   const options = (selected, draft) => `${draft ? `<option value="draft" ${selected === 'draft' ? 'selected' : ''}>Draft</option>` : ''}${state.data.policies.map((p) => `<option value="${p.version}" ${selected === p.version ? 'selected' : ''}>Policy ${p.version}${p.version === state.data.current_version ? ' · Current' : ''}</option>`).join('')}`;
   const field = (id, label, body) => `<label class="field"><span>${label}</span><select class="text-input" id="${id}" ${state.busy ? 'disabled' : ''}>${body}</select></label>`;
@@ -24,12 +24,11 @@ export function createValidationUI({ root, active, request, flush, onActivated, 
         ${field('validation-baseline', 'From', options(state.baseline, false))}
         <span class="comparison-arrow">${arrow}</span>
         ${field('validation-candidate', 'To', options(state.candidate, !!data.draft))}
-        <button class="save" data-validation="run" ${busy || state.labelsDirty ? 'disabled' : ''}>${busy ? 'Comparing…' : run ? 'Run again' : 'Compare policies'}</button>
+        <button class="save" data-validation="run" ${busy ? 'disabled' : ''}>${busy ? 'Comparing…' : run ? 'Run again' : 'Compare policies'}</button>
       </div><div class="comparison-scope"><span>${preview.total} imported claims · same facts, two policies</span>${state.candidate === 'draft' ? '<button class="link" data-validation="edit">Edit draft</button>' : '<span>Simulation only</span>'}</div></section>
       ${state.error ? `<p class="validation-alert error" role="alert">${esc(state.error)}</p>` : ''}
       <section class="policy-change-note"><h2>Policy change</h2><div>${preview.changes.length ? `<ul class="rule-differences">${preview.changes.map((c) => `<li><strong>${c.kind}</strong><span>${esc(c.text)}</span><span class="notice">${names[c.outcome] ?? ''}</span></li>`).join('')}</ul>` : '<p>The decision rules are identical.</p>'}</div></section>
       ${labelSetup()}
-      ${state.notice ? `<p class="notice" role="status">${esc(state.notice)}</p>` : ''}
       ${run ? `${stale ? '<p class="validation-alert" role="status"><strong>This comparison is out of date.</strong> The policy, claim facts, or labels changed. Run it again before activation.</p>' : ''}${results(run)}${labelled(run)}${claims(run)}${release(run, stale)}` : `<section class="validation-empty"><span class="empty-comparison">${arrow}</span><h2>Understand the impact before you release</h2><p>Compare recommendations, see where claims move, and review the cases affected by your policy change.</p><p class="notice">Recorded decisions stay intact during comparison.</p></section>`}
     </div>`;
   }
@@ -46,12 +45,8 @@ export function createValidationUI({ root, active, request, flush, onActivated, 
   function labelSetup() {
     const setup = state.data.preview.label_setup;
     if (!setup) return '';
-    const expected = state.expected ?? setup.expected;
-    return `<details class="labelled-checks label-setup" ${state.labelsOpen ? 'open' : ''}><summary><span>Set expected answers</span><span class="labelled-summary">${setup.examples.length} labelled examples · ${state.labelsDirty ? 'Unsaved changes' : setup.source === 'v1_reference' ? 'Review v1 reference labels' : setup.source === 'supplied' ? 'Supplied v1 labels' : 'Saved for these rules'}</span></summary>
-      <div class="labelled-body"><p class="notice">Set the expected recommendation under ${esc(versionName(state.candidate))} before comparing. The baseline uses its own saved or supplied labels.</p>
-      ${setup.source === 'v1_reference' ? '<p class="labelled-reference">These answers start from the supplied v1 labels. Review them for the proposed policy, then save to confirm.</p>' : ''}
-      <div class="validation-table-wrap"><table class="validation-table"><thead><tr><th>Example</th><th>Claim facts</th><th>Expected under ${esc(versionName(state.candidate))}</th></tr></thead><tbody>${setup.examples.map((record) => `<tr><td>${esc(record.case_id)}</td><td><p>${esc(record.claim_summary)}</p>${facts(record)}</td><td><select class="text-input" data-label-case="${esc(record.case_id)}" aria-label="Expected recommendation for ${esc(record.case_id)}" ${state.busy ? 'disabled' : ''}>${Object.entries(names).map(([key, name]) => `<option value="${key}" ${expected[record.case_id] === key ? 'selected' : ''}>${name}</option>`).join('')}</select></td></tr>`).join('')}</tbody></table></div>
-      <div class="labelled-footer"><span class="notice">Save answers, then select Compare policies. Saving labels does not run the engine. Previous test results keep their original labels.</span><button class="button" data-validation="labels" ${state.busy ? 'disabled' : ''}>Save labels</button></div></div></details>`;
+    const status = setup.source === 'confirmed' ? 'Confirmed for these rules.' : setup.source === 'supplied' ? 'Using the supplied v1 answers.' : 'Not confirmed yet. Scoring uses v1 answers until you confirm them.';
+    return `<section class="policy-change-note"><h2>Expected answers</h2><div class="label-link"><p>${setup.examples.length} labelled examples for ${esc(versionName(state.candidate))}. ${status}</p><button class="button" data-validation="labels">${setup.source === 'confirmed' ? 'Review expected answers' : 'Set expected answers'}</button></div></section>`;
   }
   function labelled(run) {
     const test = run.labelled;
@@ -62,7 +57,7 @@ export function createValidationUI({ root, active, request, flush, onActivated, 
     const cell = (r) => `${pill(r.actual.recommendation)}<span class="cell-note">Expected: ${esc(names[r.expected])}</span><span class="labelled-status ${r.incorrect_routine ? 'routine-miss' : ''}">${r.correct ? 'Matches' : r.incorrect_routine ? 'Incorrect routine recommendation' : 'Does not match'}</span>`;
     return `<details class="labelled-checks"><summary><span>Labelled examples</span><span class="labelled-summary">Before ${test.before.correct}/${test.before.total} · After ${test.after.correct}/${test.after.total} match${test.after.incorrect_routine ? ` · ${test.after.incorrect_routine} routine ${reference ? (test.after.incorrect_routine === 1 ? 'mismatch' : 'mismatches') : (test.after.incorrect_routine === 1 ? 'error' : 'errors')}` : ''}</span></summary>
       <div class="labelled-body"><p class="notice">The ${test.examples.length} development examples are tested with both policies. Before: ${sourceName(test.before.source)}. After: ${sourceName(test.after.source)}.</p>
-      ${reference ? '<p class="labelled-reference">The proposed policy is compared with v1 answers. Differences may be intentional. Set and save expected answers above to confirm labels for these policy rules.</p>' : ''}
+      ${reference ? '<p class="labelled-reference">The proposed policy is compared with v1 answers. Differences may be intentional. Confirm them on the Expected answers page.</p>' : ''}
       <p class="notice">${test.before.wrong} mismatches before · ${test.after.wrong} after. Incorrect routine recommendations: ${test.before.incorrect_routine} before · ${test.after.incorrect_routine} after${reference ? ' (against v1 reference)' : ''}. Unnecessary human escalations: ${test.before.unnecessary_human ?? '—'} before · ${test.after.unnecessary_human ?? '—'} after.</p>
       <div class="validation-table-wrap"><table class="validation-table labelled-table"><thead><tr><th>Example / facts</th><th>${esc(versionName(run.baseline.version))}</th><th>${esc(versionName(run.candidate.version))}</th></tr></thead><tbody>${examples.map((e) => `<tr><td><details class="validation-details"><summary>${esc(e.case.case_id)}</summary><p>${esc(e.case.claim_summary)}</p>${facts(e.case)}<p><strong>Before:</strong> ${esc(e.before.actual.explanation)}</p><p><strong>After:</strong> ${esc(e.after.actual.explanation)}</p></details></td><td>${cell(e.before)}</td><td>${cell(e.after)}</td></tr>`).join('')}</tbody></table></div>
       </div></details>`;
@@ -81,12 +76,13 @@ export function createValidationUI({ root, active, request, flush, onActivated, 
   function release(run, stale) {
     if (state.candidate !== 'draft') return '';
     const wrongBaseline = run.baseline.version !== state.data.current_version;
-    return `<section class="validation-release"><div><h2>${stale ? 'Refresh the comparison' : wrongBaseline ? 'Compare with the active policy' : 'Ready to put this policy into use?'}</h2><p>${stale ? 'Run the comparison again to include the latest changes.' : wrongBaseline ? 'Select the current policy as your baseline before activation.' : 'Activation records your approval and flags affected open claims for review.'}</p></div><div class="release-actions"><label class="field"><span>Approved by</span><input id="validation-reviewer" class="text-input" autocomplete="name" value="${esc(state.reviewer)}" placeholder="Your name" ${state.busy ? 'disabled' : ''}></label><button class="save" data-validation="activate" ${stale || wrongBaseline || state.busy || state.labelsDirty ? 'disabled' : ''}>Activate draft</button></div></section>`;
+    return `<section class="validation-release"><div><h2>${stale ? 'Refresh the comparison' : wrongBaseline ? 'Compare with the active policy' : 'Ready to put this policy into use?'}</h2><p>${stale ? 'Run the comparison again to include the latest changes.' : wrongBaseline ? 'Select the current policy as your baseline before activation.' : 'Activation records your approval and flags affected open claims for review.'}</p></div><div class="release-actions"><label class="field"><span>Approved by</span><input id="validation-reviewer" class="text-input" autocomplete="name" value="${esc(state.reviewer)}" placeholder="Your name" ${state.busy ? 'disabled' : ''}></label><button class="save" data-validation="activate" ${stale || wrongBaseline || state.busy ? 'disabled' : ''}>Activate draft</button></div></section>`;
   }
-  async function load(reset = false) {
+  async function load(reset = false, candidate = null) {
     const seq = ++generation;
     state.error = null;
     if (reset) { state.baseline = null; state.candidate = null; state.data = null; }
+    if (candidate && candidate !== state.candidate) { state.candidate = candidate; state.expanded = null; state.transition = null; }
     state.busy = true; render();
     try {
       await flush();
@@ -98,8 +94,6 @@ export function createValidationUI({ root, active, request, flush, onActivated, 
       if (!response.ok) throw new Error(data.error ?? 'Could not load the comparison. Try again.');
       if (seq !== generation) return;
       state.data = data;
-      state.expected = { ...data.preview.label_setup.expected };
-      state.labelsDirty = false;
       state.baseline ??= data.current_version;
       state.candidate ??= data.draft ? 'draft' : data.current_version;
     } catch (error) { if (seq === generation) { state.error = error.message; state.data = null; } }
@@ -109,19 +103,14 @@ export function createValidationUI({ root, active, request, flush, onActivated, 
     if (kind === 'reload') return load();
     if (state.busy) return;
     if (kind === 'edit') return onPolicies();
+    if (kind === 'labels') return onLabels(state.candidate);
     if (kind === 'filter') { state.filter = button.dataset.filter; state.transition = null; state.expanded = null; render(); return; }
     if (kind === 'transition') { state.transition = { from: button.dataset.from, to: button.dataset.to }; state.expanded = null; render(); root.querySelector('.affected-section')?.scrollIntoView({ block: 'nearest' }); return; }
     if (kind === 'clearTransition') { state.transition = null; render(); return; }
     if (kind === 'case') { state.expanded = state.expanded === button.dataset.case ? null : button.dataset.case; render(); root.querySelector('.claim-comparison')?.scrollIntoView({ block: 'nearest' }); return; }
-    if (kind === 'run' && state.labelsDirty) return;
-    const expected = kind === 'labels' ? { ...state.expected } : null;
     state.busy = true; state.error = null; render();
     try {
-      if (kind === 'labels') {
-        await request('/api/validation/labels', { candidate: state.candidate, token: state.data.preview.label_setup.token, expected });
-        state.notice = 'Labels saved. Run the comparison when you’re ready.';
-        await load();
-      } else if (kind === 'run') {
+      if (kind === 'run') {
         state.data.run = await request('/api/validation/run', { baseline: state.baseline, candidate: state.candidate });
         state.data.stale = false;
         state.data.preview.changes = state.data.run.changes;
@@ -141,18 +130,11 @@ export function createValidationUI({ root, active, request, flush, onActivated, 
   });
   root.addEventListener('input', (event) => { if (event.target.id === 'validation-reviewer') state.reviewer = event.target.value; });
   root.addEventListener('change', (event) => {
-    if (event.target.matches('[data-label-case]')) {
-      state.expected[event.target.dataset.labelCase] = event.target.value;
-      state.labelsDirty = true; state.labelsOpen = true; state.notice = null;
-      render(); return;
-    }
     if (['validation-baseline', 'validation-candidate'].includes(event.target.id)) {
       state[event.target.id === 'validation-baseline' ? 'baseline' : 'candidate'] = event.target.value;
-      state.notice = null; state.expected = null; state.labelsDirty = false;
       state.data.run = null; state.expanded = null; state.transition = null;
       load();
     }
   });
-  root.addEventListener('toggle', (event) => { if (event.target.classList?.contains('label-setup')) state.labelsOpen = event.target.open; }, true);
   return { render, load };
 }

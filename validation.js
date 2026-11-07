@@ -76,6 +76,7 @@ export class ValidationStore {
   labelSetup(policy) {
     const labels = this.labelsFor(policy);
     return { ...labels, examples: this.examples.map((e) => e.case),
+      reference: Object.fromEntries(this.examples.map((e) => [e.case.case_id, e.expected])),
       token: hash([rulesHash(policy), this.examples, labels]) };
   }
   saveLabels(policy, expected) {
