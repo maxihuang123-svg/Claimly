@@ -1,26 +1,32 @@
-// Phone ringtone for the browser-call demo: a classic telephone bell, generated with Web Audio.
+// Phone ringtone for the browser-call demo: a marimba tune, generated with Web Audio.
+// An original melody in the style of a smartphone ringtone, so no audio file is needed.
 
-// Classic double ring: ring 0.4 s, pause 0.2 s, ring 0.4 s, pause 2 s.
-const RINGS = [[0, 0.4], [0.6, 1.0]];
-const CYCLE = 3.0;
-const STRIKES_PER_SEC = 25; // the clapper hitting the bells
-const BELLS = [1050, 1250]; // two gongs struck alternately, as in a mechanical phone
+const BEAT = 0.16; // seconds per step
+const CYCLE = 2.6; // the tune, then a short pause, then again
+const NOTE = { E5: 659.26, G5: 783.99, A5: 880, C6: 1046.5, D6: 1174.66 };
+// [step, note]: a bouncy rising figure that answers itself.
+const TUNE = [
+  [0, 'E5'], [1, 'G5'], [2, 'C6'], [3, 'G5'], [4, 'D6'], [6, 'C6'],
+  [7, 'G5'], [8, 'E5'], [9, 'G5'], [10, 'A5'], [12, 'G5'],
+];
 
-function strike(context, out, frequency, time) {
+// One marimba note: a soft mallet hit on a wooden bar. The bar's overtones sit near 4x and
+// 10x the note and fade faster than it, which gives the warm, hollow knock.
+function hit(context, out, frequency, time) {
   const envelope = context.createGain();
   envelope.gain.setValueAtTime(0, time);
-  envelope.gain.linearRampToValueAtTime(0.25, time + 0.002);
-  envelope.gain.exponentialRampToValueAtTime(0.001, time + 0.25);
+  envelope.gain.linearRampToValueAtTime(0.3, time + 0.004);
+  envelope.gain.exponentialRampToValueAtTime(0.001, time + 0.7);
   envelope.connect(out);
-  // A bell: fundamental plus inharmonic partials that give the metallic ring.
-  for (const [multiple, level] of [[1, 1], [2.76, 0.4], [5.4, 0.15]]) {
+  for (const [multiple, level, decay] of [[1, 1, 0.7], [3.93, 0.25, 0.15], [9.97, 0.08, 0.05]]) {
     const oscillator = context.createOscillator();
     const gain = context.createGain();
     oscillator.frequency.value = frequency * multiple;
-    gain.gain.value = level;
+    gain.gain.setValueAtTime(level, time);
+    gain.gain.exponentialRampToValueAtTime(0.001, time + decay);
     oscillator.connect(gain).connect(envelope);
     oscillator.start(time);
-    oscillator.stop(time + 0.3);
+    oscillator.stop(time + 0.75);
   }
 }
 
@@ -28,14 +34,11 @@ function strike(context, out, frequency, time) {
 export function startRingtone() {
   const context = new AudioContext();
   const master = context.createGain();
-  master.gain.value = 0.5;
+  master.gain.value = 0.6;
   master.connect(context.destination);
 
   const schedule = (start) => {
-    for (const [from, to] of RINGS) {
-      let index = 0;
-      for (let time = from; time < to; time += 1 / STRIKES_PER_SEC) strike(context, master, BELLS[index++ % 2], start + time);
-    }
+    for (const [step, note] of TUNE) hit(context, master, NOTE[note], start + step * BEAT);
   };
 
   // Keep one cycle scheduled ahead so the ring never stutters.
