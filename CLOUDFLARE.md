@@ -21,7 +21,7 @@ npx wrangler secret put ACCESS_CODE        # optional, but use it: the URL is pu
 npm run deploy
 ```
 
-It prints a `https://claims-review.<account>.workers.dev` URL. The site starts with no cases: import
+It prints a `https://claimly.<account>.workers.dev` URL. The site starts with no cases: import
 `test/practice_cases.csv` from the Claims page. `ELEVENLABS_AGENT_ID` is in `wrangler.toml`.
 
 ## Local check of the Worker
