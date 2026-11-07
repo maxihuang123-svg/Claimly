@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Claims review</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <!--
+    Claims review.
+    THESIS: One table. A green check clears a row; clicking a row opens its trace in place.
+    SCENE: A claims handler at a desktop in daylight, working through rows with a mouse.
+    COLOR: Neutrals. Color marks the three outcomes and the approve check, nothing else.
+    TYPE: System sans throughout. Tabular numerals. Mono only for case IDs.
+    SHELL: The sidebar lists pages. Add a page by adding one entry to PAGES in app.js.
+  -->
+  <aside class="sidebar">
+    <nav aria-label="Pages"><ul class="nav" id="nav"></ul></nav>
+    <label class="reviewer">
+      <span>Reviewer</span>
+      <input id="reviewer" type="text" autocomplete="name" placeholder="Your name" spellcheck="false">
+    </label>
+  </aside>
+  <main class="page" id="page"></main>
+  <div class="toast" id="toast" role="status" hidden></div>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
