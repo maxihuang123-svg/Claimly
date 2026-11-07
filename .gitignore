@@ -5,3 +5,5 @@ data/policies.jsonl
 data/validation.jsonl
 
 data/outcomes.jsonl
+data/contacts.jsonl
+.env.local

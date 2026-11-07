@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "agent": "node scripts/setup-agent.js"
   },
   "engines": { "node": ">=20" }
 }

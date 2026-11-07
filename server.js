@@ -3,6 +3,8 @@ import { createServer } from 'node:http';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { accessGate } from './calls/access.js';
+import { callRoutes, readEnv } from './calls/node.js';
 import { CaseFileError, parseCaseFile, reviewStillApplies } from './cases.js';
 import { evaluate, RECOMMENDATIONS } from './engine.js';
 import { describeChoices, describePolicy, PolicyError, PolicyStore, validatePolicy } from './policies.js';
@@ -24,6 +26,11 @@ const STATIC_FILES = {
   '/validation.js': ['validation.js', 'text/javascript; charset=utf-8'],
   '/app.js': ['app.js', 'text/javascript; charset=utf-8'],
   '/styles.css': ['styles.css', 'text/css; charset=utf-8'],
+  '/calls.js': ['calls.js', 'text/javascript; charset=utf-8'],
+  '/calls.css': ['calls.css', 'text/css; charset=utf-8'],
+  '/ringtone.js': ['ringtone.js', 'text/javascript; charset=utf-8'],
+  '/phone.js': ['phone.js', 'text/javascript; charset=utf-8'],
+  '/missing.js': ['missing.js', 'text/javascript; charset=utf-8'],
 };
 
 const items = new Map();
@@ -55,6 +62,8 @@ function policyForImport(name) {
   if (!policy) throw new Error(`${name} was imported under ${version}, which is not in ${policiesPath}.`);
   return policy;
 }
+const calls = callRoutes({ root, findItem: (caseId) => (items.has(caseId) ? withReview(items.get(caseId)) : null) });
+const gate = accessGate(readEnv(join(root, '.env.local')).ACCESS_CODE);
 
 // The base file loads first, then each import in the order it was made. Uploaded
 // files are kept as they arrived, so the case list can always be rebuilt from them.
@@ -172,6 +181,7 @@ function findItem(caseId) {
 }
 
 async function route(request, response) {
+  if (await gate(request, response)) return;
   const { pathname } = new URL(request.url, 'http://localhost');
   const key = `${request.method} ${pathname}`;
 
@@ -274,6 +284,7 @@ async function route(request, response) {
     sendJson(response, 201, validation.labelSetup(candidate));
     return;
   }
+  if (await calls(request, response)) return;
   sendJson(response, 404, { error: 'Not found.' });
 }
 

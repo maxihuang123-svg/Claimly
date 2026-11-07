@@ -1,5 +1,7 @@
 import { createMeasurementUI } from './measurement.js';
 import { createValidationUI } from './validation.js';
+import { callsIcon, renderCalls } from './calls.js';
+
 const OUTCOMES = {
   routine_processing: { name: 'Routine processing', action: 'Send to routine processing.' },
   request_information: { name: 'Request information', action: 'Request information.' },
@@ -29,6 +31,7 @@ const PAGES = [
   { id: 'policies', label: 'Policies', icon: ICONS.document, render: renderPolicies },
   { id: 'measurement', label: 'Measurement', icon: ICONS.flag, render: () => measurementUI.render() },
   { id: 'validation', label: 'Validation', icon: ICONS.check, render: () => validationUI.render() },
+  { id: 'calls', label: 'Missing information', icon: callsIcon, render: () => renderCalls({ container: dom.page, items: state.items, status: state.status }) },
 ];
 
 const RULE_HEADINGS = {
