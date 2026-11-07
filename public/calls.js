@@ -12,6 +12,8 @@ const FINAL = ['done', 'failed'];
 
 const ANSWER_LABELS = {
   claimant_name: 'Name given',
+  repair_type: 'Repair type',
+  repair_description: 'Repair, in their words',
   claimant_reached: 'Reached claimant',
   will_send_documents: 'Will send what is missing',
   documents_expected_by: 'Expected by',
@@ -19,6 +21,18 @@ const ANSWER_LABELS = {
   new_information: 'New information',
   claimant_questions: 'Open questions',
 };
+
+const VALUE_LABELS = {
+  standard: 'Standard repair',
+  ev_high_voltage_battery: 'EV high-voltage battery',
+  unknown: 'Did not know',
+};
+const OUTCOME_NAMES = {
+  routine_processing: 'Routine processing',
+  request_information: 'Request information',
+  human_review: 'Human review',
+};
+const FIELD_NAMES = { repair_type: 'Repair type' };
 
 export const callsIcon = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
   + '<path d="M5.5 2.5h-2a1 1 0 0 0-1 1C2.5 9 7 13.5 12.5 13.5a1 1 0 0 0 1-1v-2l-2.5-1-1.2 1.2A6 6 0 0 1 5.3 6.2L6.5 5z"/></svg>';
@@ -42,7 +56,9 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => 
 ));
 const formatTime = (iso) => new Date(iso).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
 
-const requestItems = () => context.items.filter((item) => item.automated.recommendation === 'request_information');
+// Claims that need information, plus those a call already completed, so the result stays in view.
+const requestItems = () => context.items.filter((item) => item.automated.recommendation === 'request_information'
+  || state.contacts.some((contact) => contact.case_id === item.case.case_id && contact.applied));
 const contactsFor = (caseId) => state.contacts.filter((contact) => contact.case_id === caseId)
   .sort((a, b) => b.created_at.localeCompare(a.created_at));
 
@@ -95,13 +111,18 @@ function schedulePoll() {
 async function poll() {
   // A browser call still in progress has nothing to analyse yet.
   const pending = state.contacts.filter((contact) => isPending(contact) && contact.id !== state.session?.contactId);
+  let claimsChanged = false;
   await Promise.all(pending.map(async (contact) => {
     try {
-      putContact((await api(`/api/calls/result?id=${encodeURIComponent(contact.id)}`)).contact);
+      const updated = (await api(`/api/calls/result?id=${encodeURIComponent(contact.id)}`)).contact;
+      if (updated.applied && !contact.applied) claimsChanged = true;
+      putContact(updated);
     } catch (error) {
       state.pollFailed.set(contact.id, error.message);
     }
   }));
+  // A call updated a claim: reload the claims so every page shows its new recommendation.
+  if (claimsChanged) await context.onClaimsChanged?.();
   refresh();
   schedulePoll();
 }
@@ -202,6 +223,7 @@ function toggleRow(caseId) {
 function contactStatus(contact) {
   if (contact.error) return ['failed', 'Failed'];
   if (state.session?.contactId === contact.id) return ['active', 'In call'];
+  if (contact.applied) return ['done', 'Claim updated'];
   const status = contact.result?.status;
   if (status === 'done') {
     const reached = contact.result.data.claimant_reached?.value;
@@ -221,14 +243,26 @@ function renderAnswer(value) {
   if (value === null || value === undefined || value === '') return '<span class="blank">Not stated</span>';
   if (value === true) return 'Yes';
   if (value === false) return 'No';
-  return escapeHtml(value);
+  return escapeHtml(VALUE_LABELS[value] ?? value);
+}
+
+// The moment the demo is about: the answer filled the gap and the rules ran again.
+function renderApplied(applied) {
+  if (!applied) return '';
+  const changes = Object.entries(applied.changes)
+    .map(([field, value]) => `${FIELD_NAMES[field] ?? field}: ${VALUE_LABELS[value] ?? value}`).join(', ');
+  return `<div class="call-applied">
+    <p><strong>Claim updated from this call.</strong> ${escapeHtml(changes)}.</p>
+    <p>Rules re-run under policy ${escapeHtml(applied.after.policy_version)}:
+      ${escapeHtml(OUTCOME_NAMES[applied.before.recommendation])} → <strong>${escapeHtml(OUTCOME_NAMES[applied.after.recommendation])}</strong></p>
+  </div>`;
 }
 
 function renderContact(contact) {
   const result = contact.result;
   const failed = state.pollFailed.get(contact.id);
   const answers = result && Object.keys(result.data).length ? `
-    <p class="call-caption">Claimant said (unconfirmed, does not change the claim)</p>
+    <p class="call-caption">${contact.applied ? 'Claimant said. Only a clear repair type updates the claim; the rest are notes for a person.' : 'Claimant said (unconfirmed, does not change the claim)'}</p>
     <table class="call-answers"><tbody>${Object.entries(ANSWER_LABELS).map(([key, label]) => `
       <tr title="${escapeHtml(result.data[key]?.rationale)}"><th scope="row">${label}</th><td>${renderAnswer(result.data[key]?.value)}</td></tr>`).join('')}
     </tbody></table>` : '';
@@ -244,6 +278,7 @@ function renderContact(contact) {
     <p class="notice">Asked for ${escapeHtml(joinList(contact.missing_items))}. Policy ${escapeHtml(contact.policy_version)}, ${escapeHtml(contact.rule_id)}.</p>
     ${contact.error ? `<p class="error">${escapeHtml(contact.error)}</p>` : ''}
     ${failed ? `<p class="error">${escapeHtml(failed)} <button type="button" class="link" data-call-check="${contact.id}">Check again</button></p>` : ''}
+    ${renderApplied(contact.applied)}
     ${result?.summary ? `<p>${escapeHtml(result.summary)}</p>` : ''}
     ${answers}
     ${typeof newInfo === 'string' && newInfo.trim() ? '<p class="call-flag">The claimant mentioned new information. Verify it before any fact on the claim changes.</p>' : ''}
@@ -253,8 +288,11 @@ function renderContact(contact) {
 
 function renderDialer(item) {
   const id = escapeHtml(item.case.case_id);
-  if (!canCall(item)) {
+  if (item.case.case_status !== 'open') {
     return '<p class="notice">This claim is closed, so the assistant does not call. Earlier contacts are listed here.</p>';
+  }
+  if (!canCall(item)) {
+    return `<p class="notice">Nothing is missing any more. The claim is now in <strong>${escapeHtml(OUTCOME_NAMES[item.automated.recommendation])}</strong>.</p>`;
   }
   return `<p>The assistant asks only for <strong>${escapeHtml(joinList(missingItems(item)))}</strong>.
       It cannot decide, promise payment or change the claim.</p>

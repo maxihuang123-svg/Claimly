@@ -61,7 +61,7 @@ const startCall = { case_id: 'T-1' };
 test('the agent asks only for what the request information rule found missing', () => {
   assert.deepEqual(missingItems(item), ['the incident report']);
   assert.deepEqual(missingItems(itemFor({ itemized_quote_present: '' })), ['the incident report', 'an itemized repair quote']);
-  assert.deepEqual(missingItems(itemFor({ incident_report_present: 'True', repair_type: '' })), ['the kind of repair needed']);
+  assert.deepEqual(missingItems(itemFor({ incident_report_present: 'True', repair_type: '' })), ['what is being repaired, and whether the car is electric']);
 });
 
 test('only open claims that need information can be called', () => {

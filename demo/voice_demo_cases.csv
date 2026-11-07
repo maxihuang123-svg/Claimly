@@ -1,0 +1,4 @@
+case_id,case_status,claim_summary,policy_active_on_incident,claim_type,repair_type,quote_eur,incident_report_present,itemized_quote_present,injury_reported,liability_disputed,duplicate_flag,evidence_conflict
+DEMO-101,open,Rear bumper dented in a supermarket car park. The claim form leaves the repair type blank.,True,motor_own_damage,,850,True,True,False,False,False,False
+DEMO-102,open,Side mirror and door scraped while parking. The claim form leaves the repair type blank.,True,motor_own_damage,,640,True,True,False,False,False,False
+DEMO-103,open,Front wing dented by a bollard. The claim form leaves the repair type blank.,True,motor_own_damage,,920,True,True,False,False,False,False

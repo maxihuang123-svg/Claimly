@@ -4,7 +4,8 @@
 //   GET  /api/calls                  every contact, for the page
 //   POST /api/calls                  { case_id } -> signed URL for a browser call
 //   POST /api/calls/connected        { id, conversation_id?, error? }  the browser reports its session
-//   GET  /api/calls/result?id=...    fetches the call's analysis from ElevenLabs once, then keeps it
+//   GET  /api/calls/result?id=...    fetches the call's analysis from ElevenLabs once, then keeps it;
+//                                    a clear answer to a blank field then updates the claim (UPDATES)
 //
 // The ElevenLabs key stays on the server. What the agent asks for is worked out here from the case,
 // never taken from the browser.
@@ -15,6 +16,14 @@ import { canCall, joinList, missingItems } from '../public/missing.js';
 const EL = 'https://api.elevenlabs.io/v1';
 const FINAL = ['done', 'failed'];
 const STARTED_BY = 'Claimly app'; // calls are started from the app, not signed by a person
+
+// Claim fields a claimant can settle on a call, with the answers that count as clear. A clear answer
+// to a field that is still blank updates the claim and the rules run again; anything else ("unknown",
+// a field that already has a value) stays with a person.
+const UPDATES = { repair_type: ['standard', 'ev_high_voltage_battery'] };
+const outcome = (automated) => ({
+  recommendation: automated.recommendation, policy_version: automated.policy_version, rule_id: automated.rule_id,
+});
 const MAX_JSON_BYTES = 64 * 1024;
 
 class CallError extends Error {
@@ -42,7 +51,8 @@ async function readJson(request) {
   }
 }
 
-export function createCallApi({ env, findItem, contacts, fetch = globalThis.fetch }) {
+// updateCase(caseId, changes) re-imports the case with the changes and returns its new automated result.
+export function createCallApi({ env, findItem, contacts, updateCase = null, fetch = globalThis.fetch }) {
   async function el(path, init = {}) {
     const response = await fetch(`${EL}${path}`, {
       ...init,
@@ -87,6 +97,18 @@ export function createCallApi({ env, findItem, contacts, fetch = globalThis.fetc
     return json({ contact: Object.keys(patch).length ? await contacts.update(contact.id, patch) : contact });
   }
 
+  function applyAnswers(contact, result) {
+    if (!updateCase || contact.applied || result.status !== 'done') return null;
+    const item = findItem(contact.case_id);
+    if (!item || item.case.case_status !== 'open') return null;
+    const changes = Object.fromEntries(Object.entries(UPDATES)
+      .filter(([field, clear]) => item.case[field] === null && clear.includes(result.data[field]?.value))
+      .map(([field]) => [field, result.data[field].value]));
+    if (!Object.keys(changes).length) return null;
+    const after = updateCase(item.case.case_id, changes);
+    return { at: new Date().toISOString(), changes, before: outcome(item.automated), after: outcome(after) };
+  }
+
   // Claimant statements, kept apart from claim facts. Once ElevenLabs has finished the analysis the result
   // is stored and ElevenLabs is not asked again.
   async function result(url) {
@@ -108,7 +130,8 @@ export function createCallApi({ env, findItem, contacts, fetch = globalThis.fetc
         .map((turn) => ({ role: turn.role, message: turn.message })),
     };
     if (contact.result?.status === update.status && !FINAL.includes(update.status)) return json({ contact });
-    return json({ contact: await contacts.update(contact.id, { result: update }) });
+    const applied = applyAnswers(contact, update);
+    return json({ contact: await contacts.update(contact.id, applied ? { result: update, applied } : { result: update }) });
   }
 
   // Returns null for paths that are not ours, so the caller can carry on routing.

@@ -49,6 +49,7 @@ td.c-missing { color: var(--ink-2); }
 .call-answers { border-collapse: collapse; font-size: 13px; }
 .call-answers th { padding: 2px 16px 2px 0; color: var(--ink-2); font-weight: 500; text-align: left; white-space: nowrap; vertical-align: top; }
 .call-answers td { padding: 2px 0; }
+.call-applied { display: grid; gap: 2px; padding: 8px 10px; border-radius: var(--radius); background: var(--sunken); border-left: 3px solid var(--ink); font-size: 13.5px; }
 .call-flag { padding: 6px 10px; border-radius: var(--radius); background: var(--danger-tint); color: var(--danger); font-size: 13px; font-weight: 550; }
 
 .call-transcript summary { color: var(--ink-2); font-size: 13px; cursor: pointer; }

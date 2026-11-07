@@ -1,7 +1,7 @@
 import { readText, TooLarge } from './body.js';
 import { createCallApi } from './calls/api.js';
 import { ContactLog } from './calls/contacts.js';
-import { CaseFileError, parseCaseFile, reviewStillApplies } from './cases.js';
+import { CaseFileError, parseCaseFile, REQUIRED_COLUMNS, reviewStillApplies } from './cases.js';
 import { evaluate, RECOMMENDATIONS } from './engine.js';
 import { OutcomeStore, measurementPayload } from './measurement.js';
 import { describeChoices, describePolicy, PolicyError, PolicyStore, validatePolicy } from './policies.js';
@@ -9,6 +9,13 @@ import { REASONS, ReviewError, ReviewLog } from './reviews.js';
 import { ValidationStore, hash } from './validation.js';
 
 const MAX_JSON_BYTES = 64 * 1024;
+
+// One case as a CSV file, in the same format as an upload.
+const csvValue = (value) => {
+  const text = value === null ? '' : typeof value === 'boolean' ? (value ? 'True' : 'False') : String(value);
+  return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+};
+const caseCsv = (record) => `${REQUIRED_COLUMNS.join(',')}\n${REQUIRED_COLUMNS.map((column) => csvValue(record[column])).join(',')}\n`;
 export const MAX_CSV_BYTES = 5 * 1024 * 1024;
 
 // The whole API as one web handler, Request in and Response out. server.js runs it on
@@ -131,6 +138,13 @@ export function createApp({ logs, imports, baseCases = null, engineVersion, exam
     return summary;
   }
 
+  // A correction from a claimant call goes in like any upload: a one-row file, evaluated under the
+  // current policy and kept with the other imports, so the case can always be rebuilt.
+  function updateCase(caseId, changes) {
+    importCases(caseCsv({ ...findItem(caseId).case, ...changes }));
+    return withReview(items.get(caseId)).automated;
+  }
+
   const json = (body, status = 200) => new Response(JSON.stringify(body), {
     status, headers: { 'Content-Type': 'application/json; charset=utf-8' },
   });
@@ -160,7 +174,7 @@ export function createApp({ logs, imports, baseCases = null, engineVersion, exam
   }
 
   const calls = createCallApi({
-    env, fetch, contacts: new ContactLog(logs.contacts),
+    env, fetch, contacts: new ContactLog(logs.contacts), updateCase,
     findItem: (caseId) => (items.has(caseId) ? withReview(items.get(caseId)) : null),
   });
 

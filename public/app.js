@@ -34,7 +34,7 @@ const PAGES = [
   { id: 'measurement', label: 'Measurement', icon: ICONS.flag, render: () => measurementUI.render() },
   { id: 'labels', label: 'Expected answers', icon: ICONS.tag, render: () => labelsUI.render() },
   { id: 'validation', label: 'Validation', icon: ICONS.check, render: () => validationUI.render() },
-  { id: 'calls', label: 'Missing information', icon: callsIcon, render: () => renderCalls({ container: dom.page, items: state.items, status: state.status }) },
+  { id: 'calls', label: 'Missing information', icon: callsIcon, render: () => renderCalls({ container: dom.page, items: state.items, status: state.status, onClaimsChanged: reloadClaims }) },
 ];
 
 const RULE_HEADINGS = {
@@ -561,6 +561,14 @@ const postJson = (path, body) => post(path, JSON.stringify(body));
 function replaceItem(updated) {
   const index = state.items.findIndex((item) => item.case.case_id === updated.case.case_id);
   state.items[index] = updated;
+}
+
+// Quiet reload after a claimant call updated a claim (calls.js).
+async function reloadClaims() {
+  const response = await fetch('/api/cases');
+  if (!response.ok) return;
+  applyCases(await response.json());
+  render();
 }
 
 function applyCases(data) {

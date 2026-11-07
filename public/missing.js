@@ -10,7 +10,7 @@ const ASK = {
 // Blank fields behind the "Other fields" check. case_status is internal and not the claimant's to supply.
 const ASK_BLANK = {
   claim_type: 'a short description of what happened',
-  repair_type: 'the kind of repair needed',
+  repair_type: 'what is being repaired, and whether the car is electric',
   quote_eur: 'the repair quote amount',
   policy_active_on_incident: 'the date of the incident',
   injury_reported: 'confirmation of whether anyone was injured',
