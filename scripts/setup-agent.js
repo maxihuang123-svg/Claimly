@@ -27,6 +27,7 @@ if (!response.ok) {
 }
 
 if (existing) {
+  await response.text(); // read the reply, or the open connection keeps the script running
   console.log(`Updated agent ${existing}.`);
 } else {
   const { agent_id: agentId } = await response.json();

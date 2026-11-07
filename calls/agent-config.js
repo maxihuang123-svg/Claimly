@@ -37,8 +37,18 @@ export const AGENT_CONFIG = {
       },
       prompt: { prompt: PROMPT, temperature: 0.2 },
     },
-    // Browser calls only, so full 16 kHz audio rather than telephone quality.
-    tts: { agent_output_audio_format: 'pcm_16000' },
+    // Browser calls only, so full 16 kHz audio rather than telephone quality. Flash is ElevenLabs' lowest-latency
+    // English model; expressive mode off and a higher stability keep the voice the same through the call.
+    tts: {
+      model_id: 'eleven_flash_v2',
+      voice_id: 'cjVigY5qzO86Huf0OWal', // Eric: calm, trustworthy, American English
+      expressive_mode: false,
+      stability: 0.75,
+      similarity_boost: 0.8,
+      optimize_streaming_latency: 4,
+      agent_output_audio_format: 'pcm_16000',
+    },
+    turn: { turn_eagerness: 'eager' }, // answer as soon as the claimant has finished
     asr: { user_input_audio_format: 'pcm_16000' },
   },
   platform_settings: {

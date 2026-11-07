@@ -103,19 +103,33 @@ async function load() {
 const isPending = (contact) => contact.conversation_id && !contact.error
   && !FINAL.includes(contact.result?.status) && !state.pollFailed.has(contact.id);
 
+const onPage = () => Boolean(context?.container.querySelector('[data-calls-page]'));
+
+// While this page is open it keeps checking, so a call taken on another device (a phone) shows up
+// here as it happens. Elsewhere it only follows calls that still wait for their result.
 function schedulePoll() {
   clearTimeout(pollTimer);
-  if (state.contacts.some(isPending)) pollTimer = setTimeout(poll, POLL_MS);
+  if (onPage() || state.contacts.some(isPending)) pollTimer = setTimeout(poll, POLL_MS);
 }
 
 async function poll() {
-  // A browser call still in progress has nothing to analyse yet.
-  const pending = state.contacts.filter((contact) => isPending(contact) && contact.id !== state.session?.contactId);
+  const known = new Map(state.contacts.map((contact) => [contact.id, contact]));
+  const isNewlyApplied = (contact) => contact.applied && !known.get(contact.id)?.applied;
   let claimsChanged = false;
+  if (onPage()) {
+    try {
+      for (const contact of (await api('/api/calls')).contacts) {
+        if (isNewlyApplied(contact)) claimsChanged = true;
+        putContact(contact);
+      }
+    } catch { /* try again on the next round */ }
+  }
+  // A browser call still in progress on this device has nothing to analyse yet.
+  const pending = state.contacts.filter((contact) => isPending(contact) && contact.id !== state.session?.contactId);
   await Promise.all(pending.map(async (contact) => {
     try {
       const updated = (await api(`/api/calls/result?id=${encodeURIComponent(contact.id)}`)).contact;
-      if (updated.applied && !contact.applied) claimsChanged = true;
+      if (isNewlyApplied(updated)) claimsChanged = true;
       putContact(updated);
     } catch (error) {
       state.pollFailed.set(contact.id, error.message);
@@ -371,6 +385,7 @@ export function renderCalls(nextContext) {
   context = nextContext;
   if (!state.loaded && !state.loading && !state.loadError) load();
   draw();
+  if (state.loaded) schedulePoll(); // back on this page: start watching again
 }
 
 /* Events. app.js handles its own data attributes; these all start with data-call. */
