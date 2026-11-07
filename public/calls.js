@@ -8,7 +8,6 @@ import { showIncomingCall } from './phone.js';
 const CLIENT_URL = 'https://esm.sh/@elevenlabs/client@1.35.0'; // loaded only when a browser call starts
 const CALLER = 'Claimly Claims'; // the name on the claimant's call screen
 const POLL_MS = 4000;
-const NAME_KEY = 'claims-review.caller-name'; // remembered on this device, so a phone asks only once
 const FINAL = ['done', 'failed'];
 
 const ANSWER_LABELS = {
@@ -24,12 +23,7 @@ const ANSWER_LABELS = {
 export const callsIcon = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
   + '<path d="M5.5 2.5h-2a1 1 0 0 0-1 1C2.5 9 7 13.5 12.5 13.5a1 1 0 0 0 1-1v-2l-2.5-1-1.2 1.2A6 6 0 0 1 5.3 6.2L6.5 5z"/></svg>';
 
-// Storage can be blocked (private mode), so the page works without it.
-const storedName = () => { try { return localStorage.getItem(NAME_KEY) ?? ''; } catch { return ''; } };
-const storeName = (name) => { try { localStorage.setItem(NAME_KEY, name); } catch { /* not remembered */ } };
-
 const state = {
-  name: storedName(), // who started the call, saved with the contact
   contacts: [],
   loaded: false,
   loading: false,
@@ -114,15 +108,6 @@ async function poll() {
 
 /* Actions */
 
-// This page has its own name field: the reviewer field on the claims page is only there
-// while a claim is open, so it cannot be relied on here.
-function reviewerName() {
-  const name = state.name.trim();
-  if (name) return name;
-  context.container.querySelector('[data-call-name]')?.focus();
-  return null;
-}
-
 function report(contactId, patch) {
   api('/api/calls/connected', { id: contactId, ...patch })
     .then(({ contact }) => { putContact(contact); refresh(); })
@@ -133,13 +118,6 @@ function report(contactId, patch) {
 // voice session. Nothing is recorded unless the call is answered.
 function ringBrowser(caseId) {
   state.error = null;
-  const reviewer = reviewerName();
-  if (!reviewer) {
-    state.error = 'Enter your name first. It is saved with the call.';
-    refresh();
-    context.container.querySelector('[data-call-name]')?.focus();
-    return;
-  }
   const client = import(CLIENT_URL); // load while it rings
   client.catch(() => {});
   const session = { caseId, contactId: null, conversation: null, hungUp: false };
@@ -155,7 +133,7 @@ function ringBrowser(caseId) {
     caller: CALLER,
     detail: `Motor claim ${caseId}`,
     onDecline: finish,
-    onAccept: () => connect(session, reviewer, client, screen).finally(finish),
+    onAccept: () => connect(session, client, screen).finally(finish),
     onHangUp: () => {
       session.hungUp = true;
       if (session.conversation) session.conversation.endSession();
@@ -165,12 +143,12 @@ function ringBrowser(caseId) {
   });
 }
 
-async function connect(session, reviewer, client, screen) {
+async function connect(session, client, screen) {
   try {
     const { VoiceConversation } = await client.catch(() => {
       throw new Error('The voice client could not be loaded. Check the internet connection.');
     });
-    const started = await api('/api/calls', { case_id: session.caseId, initiated_by: reviewer });
+    const started = await api('/api/calls', { case_id: session.caseId });
     putContact(started.contact);
     session.contactId = started.contact.id;
     refresh();
@@ -281,9 +259,6 @@ function renderDialer(item) {
   return `<p>The assistant asks only for <strong>${escapeHtml(joinList(missingItems(item)))}</strong>.
       It cannot decide, promise payment or change the claim.</p>
     <div class="call-line">
-      <label class="field call-name"><span>Your name</span>
-        <input type="text" class="text-input" data-call-name autocomplete="name" value="${escapeHtml(state.name)}"
-          ${state.error && !state.name.trim() ? 'aria-invalid="true"' : ''}></label>
       <button type="button" class="save" data-call-browser="${id}" ${state.session ? 'disabled' : ''}>Incoming call</button>
       <span class="notice">This device rings like a phone. Answer it as the claimant.</span>
     </div>
@@ -339,8 +314,6 @@ function renderBody() {
 }
 
 function draw() {
-  // Polling redraws the page; keep the cursor in the name field while someone is typing.
-  const typing = document.activeElement?.matches?.('[data-call-name]');
   const callable = requestItems().filter(canCall);
   const contacted = callable.filter((item) => contactsFor(item.case.case_id).length).length;
   const progress = callable.length ? `${contacted} of ${callable.length} open claims contacted` : '';
@@ -349,11 +322,6 @@ function draw() {
     <div class="page-head"><h1>Missing information</h1><p class="progress">${progress}</p></div>
     ${renderBody()}
   </div>`;
-  const input = typing && context.container.querySelector('[data-call-name]');
-  if (input) {
-    input.focus();
-    input.setSelectionRange(input.value.length, input.value.length);
-  }
 }
 
 // Redraw only while this page is the one on screen.
@@ -368,13 +336,6 @@ export function renderCalls(nextContext) {
 }
 
 /* Events. app.js handles its own data attributes; these all start with data-call. */
-
-document.addEventListener('input', (event) => {
-  if (!event.target.matches?.('[data-call-name]')) return;
-  state.name = event.target.value;
-  storeName(state.name.trim());
-  event.target.removeAttribute('aria-invalid');
-});
 
 document.addEventListener('click', (event) => {
   if (!context?.container.querySelector('[data-calls-page]')) return;

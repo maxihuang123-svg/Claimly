@@ -2,7 +2,7 @@
 // in a Cloudflare Function later. Only the contact store and the Node adapter (node.js) are Node-specific.
 //
 //   GET  /api/calls                  every contact, for the page
-//   POST /api/calls                  { case_id, initiated_by } -> signed URL for a browser call
+//   POST /api/calls                  { case_id } -> signed URL for a browser call
 //   POST /api/calls/connected        { id, conversation_id?, error? }  the browser reports its session
 //   GET  /api/calls/result?id=...    fetches the call's analysis from ElevenLabs once, then keeps it
 //
@@ -14,6 +14,7 @@ import { canCall, joinList, missingItems } from '../public/missing.js';
 
 const EL = 'https://api.elevenlabs.io/v1';
 const FINAL = ['done', 'failed'];
+const STARTED_BY = 'Claimly app'; // calls are started from the app, not signed by a person
 const MAX_JSON_BYTES = 64 * 1024;
 
 class CallError extends Error {
@@ -56,8 +57,6 @@ export function createCallApi({ env, findItem, contacts, fetch = globalThis.fetc
     const item = findItem(String(body.case_id ?? ''));
     if (!item) throw new CallError(404, `Unknown case ${body.case_id}.`);
     if (!canCall(item)) throw new CallError(400, 'Calls are only for open claims that need more information.');
-    const initiatedBy = String(body.initiated_by ?? '').trim();
-    if (!initiatedBy) throw new CallError(400, 'Enter your name in the sidebar first.');
 
     // Get the signed URL before recording, so a call that cannot start leaves no contact behind.
     const agent = encodeURIComponent(need(env, 'ELEVENLABS_AGENT_ID'));
@@ -66,7 +65,7 @@ export function createCallApi({ env, findItem, contacts, fetch = globalThis.fetc
     const missing = missingItems(item);
     const contact = await contacts.add({
       case_id: item.case.case_id,
-      initiated_by: initiatedBy,
+      initiated_by: STARTED_BY,
       missing_items: missing,
       policy_version: item.automated.policy_version,
       rule_id: item.automated.rule_id,

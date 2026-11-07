@@ -56,7 +56,7 @@ function setup(routes = {}, items = [item]) {
 }
 
 const SIGNED = { '/v1/convai/conversation/get-signed-url': { signed_url: 'wss://signed' } };
-const startCall = { case_id: 'T-1', initiated_by: 'A' };
+const startCall = { case_id: 'T-1' };
 
 test('the agent asks only for what the request information rule found missing', () => {
   assert.deepEqual(missingItems(item), ['the incident report']);
@@ -83,9 +83,11 @@ test('a closed claim is not called', async () => {
   assert.equal((await call('POST', '/api/calls', startCall)).status, 400);
 });
 
-test('a call needs the reviewer name', async () => {
-  const { call } = setup(SIGNED);
-  assert.equal((await call('POST', '/api/calls', { case_id: 'T-1', initiated_by: ' ' })).status, 400);
+test('a call is recorded as started from the app, whatever the browser sends', async () => {
+  const { call, contacts } = setup(SIGNED);
+  const response = await call('POST', '/api/calls', { ...startCall, initiated_by: 'Someone else' });
+  assert.equal(response.status, 201);
+  assert.equal(contacts.get(response.body.contact.id).initiated_by, 'Claimly app');
 });
 
 test('the server, not the browser, decides what the agent is told', async () => {
