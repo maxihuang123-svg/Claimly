@@ -29,7 +29,7 @@ export function fileImports(dir) {
       : []),
     save(name, text) {
       mkdirSync(dir, { recursive: true });
-      writeFileSync(join(dir, name), text);
+      writeFileSync(join(dir, name), text, { flag: 'wx' }); // never overwrite an earlier import
     },
   };
 }

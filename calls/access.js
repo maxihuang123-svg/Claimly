@@ -1,5 +1,6 @@
 import { Buffer } from 'node:buffer';
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import { readText } from '../body.js';
 
 // A shared access code for when the app is reachable from outside (a tunnel or a deploy).
 // Off unless ACCESS_CODE is set. Entering the code once sets a cookie; everything else needs it.
@@ -42,8 +43,11 @@ const html = (body, status, headers = {}) => new Response(body, {
 });
 
 async function readCode(request) {
-  const body = (await request.text()).slice(0, 1024);
-  return new URLSearchParams(body).get('code')?.trim() ?? '';
+  try {
+    return new URLSearchParams(await readText(request, 1024)).get('code')?.trim() ?? '';
+  } catch {
+    return ''; // too large: treated as a wrong code
+  }
 }
 
 // Returns a handler that answers the request itself (login page, 401) with a Response,

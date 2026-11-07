@@ -11,6 +11,8 @@ The same app runs on Node (`npm start`, files under `data/`) and on Cloudflare (
 
 ## First deploy
 
+Needs Node 22 or later (Wrangler does not run on Node 20).
+
 ```sh
 npm install
 npx wrangler login
@@ -30,5 +32,5 @@ and open http://localhost:8787. Its data is kept in `.wrangler/state`.
 ## Limits
 
 - One Durable Object handles every request, one at a time. That is plenty for a team and a demo.
-- A wrong access code is counted per Worker instance, so the rate limit is looser than on Node.
+- Code attempts go through the Durable Object, so the limit of 10 wrong codes a minute is shared by the whole site.
 - Data on Cloudflare and in `data/` are separate. Nothing is copied between them.

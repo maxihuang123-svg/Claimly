@@ -9,10 +9,12 @@
 // The ElevenLabs key stays on the server. What the agent asks for is worked out here from the case,
 // never taken from the browser.
 
+import { readText, TooLarge } from '../body.js';
 import { canCall, joinList, missingItems } from '../public/missing.js';
 
 const EL = 'https://api.elevenlabs.io/v1';
 const FINAL = ['done', 'failed'];
+const MAX_JSON_BYTES = 64 * 1024;
 
 class CallError extends Error {
   constructor(status, message) {
@@ -32,8 +34,9 @@ function need(env, name) {
 
 async function readJson(request) {
   try {
-    return await request.json();
-  } catch {
+    return JSON.parse(await readText(request, MAX_JSON_BYTES));
+  } catch (error) {
+    if (error instanceof TooLarge) throw new CallError(413, 'Request is too large.');
     throw new CallError(400, 'Request is not valid JSON.');
   }
 }

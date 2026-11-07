@@ -18,8 +18,12 @@ function sqlLog(sql, name) {
     path: `sqlite:${name}`,
     read: () => sql.exec('SELECT text FROM lines WHERE log = ? ORDER BY id', name).toArray().map((row) => row.text).join(''),
     append(text) {
-      for (let at = 0; at < text.length; at += CHUNK) {
-        sql.exec('INSERT INTO lines (log, text) VALUES (?, ?)', name, text.slice(at, at + CHUNK));
+      for (let at = 0; at < text.length;) {
+        let end = Math.min(at + CHUNK, text.length);
+        // Never split a surrogate pair (an emoji, say): each half alone is not valid text.
+        if (end < text.length && /[\uD800-\uDBFF]/.test(text[end - 1])) end -= 1;
+        sql.exec('INSERT INTO lines (log, text) VALUES (?, ?)', name, text.slice(at, end));
+        at = end;
       }
     },
   };
@@ -30,7 +34,11 @@ function sqlImports(sql) {
   return {
     list: () => sql.exec("SELECT DISTINCT log FROM lines WHERE log LIKE 'import:%' ORDER BY log").toArray()
       .map(({ log }) => ({ name: log.slice('import:'.length), text: sqlLog(sql, log).read() })),
-    save: (name, text) => sqlLog(sql, `import:${name}`).append(text),
+    save(name, text) {
+      const log = `import:${name}`;
+      if (sql.exec('SELECT 1 FROM lines WHERE log = ? LIMIT 1', log).toArray().length) throw new Error(`Import ${name} already exists.`);
+      sqlLog(sql, log).append(text);
+    },
   };
 }
 
@@ -49,8 +57,11 @@ export class Claims extends DurableObject {
     });
   }
 
-  fetch(request) {
-    return this.app.handle(request);
+  async fetch(request) {
+    // Code attempts come here too, so wrong guesses are counted once for the whole site,
+    // not separately in each Worker instance.
+    this.gate ??= accessGate(this.env.ACCESS_CODE);
+    return (await this.gate(request)) ?? this.app.handle(request);
   }
 }
 
@@ -58,12 +69,16 @@ let gate;
 
 export default {
   async fetch(request, env) {
+    const { pathname } = new URL(request.url);
+    const app = () => env.CLAIMS.get(env.CLAIMS.idFromName('main')).fetch(request);
+    if (request.method === 'POST' && pathname === '/access') {
+      // A code is a few bytes, so anything large is refused here, before it reaches the object.
+      if (!(Number(request.headers.get('content-length')) <= 1024)) return new Response('Request is too large.', { status: 413 });
+      return app();
+    }
     gate ??= accessGate(env.ACCESS_CODE);
     const denied = await gate(request);
     if (denied) return denied;
-    if (new URL(request.url).pathname.startsWith('/api/')) {
-      return env.CLAIMS.get(env.CLAIMS.idFromName('main')).fetch(request);
-    }
-    return env.ASSETS.fetch(request);
+    return pathname.startsWith('/api/') ? app() : env.ASSETS.fetch(request);
   },
 };

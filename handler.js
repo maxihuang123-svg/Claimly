@@ -1,3 +1,4 @@
+import { readText, TooLarge } from './body.js';
 import { createCallApi } from './calls/api.js';
 import { ContactLog } from './calls/contacts.js';
 import { CaseFileError, parseCaseFile, reviewStillApplies } from './cases.js';
@@ -46,9 +47,13 @@ export function createApp({ logs, imports, baseCases = null, engineVersion, exam
   // The base file loads first, then each import in the order it was made. Uploaded
   // files are kept as they arrived, so the case list can always be rebuilt from them.
   // A case keeps the policy it was evaluated under until an import changes its data.
+  let lastImportAt = 0;
   function loadCases() {
     const files = baseCases === null ? [] : [[baseCases, policies.original]];
-    files.push(...imports.list().map(({ name, text }) => [text, policyForImport(name)]));
+    for (const { name, text } of imports.list()) {
+      lastImportAt = Math.max(lastImportAt, Number.parseInt(name, 10) || 0);
+      files.push([text, policyForImport(name)]);
+    }
     for (const [text, policy] of files) {
       for (const item of parseCaseFile(text, policy, policies.original)) {
         const existing = items.get(item.case.case_id);
@@ -117,7 +122,10 @@ export function createApp({ logs, imports, baseCases = null, engineVersion, exam
     }
 
     if (changes.length) {
-      imports.save(`${Date.now()}.${policy.version}.csv`, text);
+      // Names sort in import order. Two imports in the same millisecond (or under a
+      // frozen Worker clock) must still get different names.
+      lastImportAt = Math.max(Date.now(), lastImportAt + 1);
+      imports.save(`${lastImportAt}.${policy.version}.csv`, text);
       for (const item of changes) items.set(item.case.case_id, item);
     }
     return summary;
@@ -128,9 +136,12 @@ export function createApp({ logs, imports, baseCases = null, engineVersion, exam
   });
 
   async function readBody(request, limit) {
-    const body = await request.arrayBuffer();
-    if (body.byteLength > limit) throw new ReviewError('That file is too large. The limit is 5 MB.');
-    return new TextDecoder().decode(body);
+    try {
+      return await readText(request, limit);
+    } catch (error) {
+      if (error instanceof TooLarge) throw new ReviewError('That file is too large. The limit is 5 MB.');
+      throw error;
+    }
   }
 
   async function readJson(request) {

@@ -1,10 +1,11 @@
 import { createServer } from 'node:http';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
+import { Readable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import { accessGate } from './calls/access.js';
 import { readEnv } from './env.js';
-import { createApp, MAX_CSV_BYTES } from './handler.js';
+import { createApp } from './handler.js';
 import { fileImports } from './storage.js';
 import { hash } from './validation.js';
 
@@ -44,19 +45,15 @@ const app = createApp({
 });
 const gate = accessGate(env.ACCESS_CODE);
 
-class TooLarge extends Error {}
-
-async function toWebRequest(request) {
+// The body stays a stream: each route reads it with its own size limit (body.js).
+function toWebRequest(request) {
   const url = `http://${request.headers.host ?? 'localhost'}${request.url}`;
-  if (request.method === 'GET' || request.method === 'HEAD') return new Request(url, { method: request.method, headers: request.headers });
-  let size = 0;
-  const chunks = [];
-  for await (const chunk of request) {
-    size += chunk.length;
-    if (size > MAX_CSV_BYTES) throw new TooLarge();
-    chunks.push(chunk);
-  }
-  return new Request(url, { method: request.method, headers: request.headers, body: Buffer.concat(chunks) });
+  const hasBody = request.method !== 'GET' && request.method !== 'HEAD';
+  return new Request(url, {
+    method: request.method,
+    headers: request.headers,
+    ...(hasBody ? { body: Readable.toWeb(request), duplex: 'half' } : {}),
+  });
 }
 
 async function send(response, answer) {
@@ -67,7 +64,7 @@ async function send(response, answer) {
 }
 
 async function route(incoming, response) {
-  const request = await toWebRequest(incoming);
+  const request = toWebRequest(incoming);
   const denied = await gate(request);
   if (denied) return send(response, denied);
 
@@ -83,10 +80,9 @@ async function route(incoming, response) {
 
 createServer((request, response) => {
   route(request, response).catch((error) => {
-    const tooLarge = error instanceof TooLarge;
-    if (!tooLarge) console.error(error);
-    response.writeHead(tooLarge ? 400 : 500, { 'Content-Type': 'application/json; charset=utf-8' });
-    response.end(JSON.stringify({ error: tooLarge ? 'That file is too large. The limit is 5 MB.' : 'The server could not complete that request.' }));
+    console.error(error);
+    response.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+    response.end(JSON.stringify({ error: 'The server could not complete that request.' }));
   });
 }).listen(port, '127.0.0.1', () => {
   console.log(`Claims review: http://localhost:${port}`);
