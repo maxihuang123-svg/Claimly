@@ -1,5 +1,5 @@
-// Phone ringtone for the browser-call demo: a marimba tune, generated with Web Audio.
-// An original melody in the style of a smartphone ringtone, so no audio file is needed.
+// Phone ringtone for the browser-call demo: public/ringtone.mp3 if present, else a marimba tune generated with Web Audio.
+// The generated one is an original melody in the style of a smartphone ringtone.
 
 const BEAT = 0.16; // seconds per step
 const CYCLE = 2.6; // the tune, then a short pause, then again
@@ -30,8 +30,26 @@ function hit(context, out, frequency, time) {
   }
 }
 
-// Starts ringing and returns a function that stops it.
+// Plays public/ringtone.mp3 on a loop if it is there; otherwise, or if it cannot play,
+// rings with the generated tune. Returns a function that stops it.
 export function startRingtone() {
+  let stopped = false;
+  let stopFallback = null;
+  const fallback = () => {
+    if (!stopped && !stopFallback) stopFallback = startGenerated();
+  };
+  const audio = new Audio('/ringtone.mp3');
+  audio.loop = true;
+  audio.addEventListener('error', fallback);
+  audio.play().catch(fallback);
+  return () => {
+    stopped = true;
+    audio.pause();
+    stopFallback?.();
+  };
+}
+
+function startGenerated() {
   const context = new AudioContext();
   const master = context.createGain();
   master.gain.value = 0.6;

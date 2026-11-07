@@ -27,6 +27,7 @@ const STATIC_FILES = {
   '/calls.js': ['calls.js', 'text/javascript; charset=utf-8'],
   '/calls.css': ['calls.css', 'text/css; charset=utf-8'],
   '/ringtone.js': ['ringtone.js', 'text/javascript; charset=utf-8'],
+  '/ringtone.mp3': ['ringtone.mp3', 'audio/mpeg'],
   '/phone.js': ['phone.js', 'text/javascript; charset=utf-8'],
   '/missing.js': ['missing.js', 'text/javascript; charset=utf-8'],
 };
