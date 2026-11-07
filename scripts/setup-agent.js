@@ -2,7 +2,7 @@
 // Creates the ElevenLabs callback agent and saves its ID to .env.local, or updates it if ELEVENLABS_AGENT_ID is set.
 import { appendFileSync } from 'node:fs';
 import { AGENT_CONFIG } from '../calls/agent-config.js';
-import { readEnv } from '../calls/node.js';
+import { readEnv } from '../env.js';
 
 const ENV_FILE = '.env.local';
 const env = readEnv(ENV_FILE);

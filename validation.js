@@ -1,12 +1,13 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { appendFileSync, existsSync, readFileSync, mkdirSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { readFileSync } from 'node:fs';
 import { conditionText, evaluate, normalizeCase, RECOMMENDATIONS } from './engine.js';
 import { PolicyError, POLICY_V1, validatePolicy } from './policies.js';
 import { parseCsv } from './csv.js';
+import { asLog } from './storage.js';
 
-const developmentExamples = () => parseCsv(readFileSync(new URL('./test/labelled_development_cases.csv', import.meta.url), 'utf8'))
+export const examplesFrom = (text) => parseCsv(text)
   .map((row) => ({ case: normalizeCase(row), expected: row.expected_v1 }));
+const developmentExamples = () => examplesFrom(readFileSync(new URL('./test/labelled_development_cases.csv', import.meta.url), 'utf8'));
 
 export const hash = (value) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 export const rulesHash = (policy) => hash(policy.rules);
@@ -50,17 +51,17 @@ export function impactSummary(claims) {
 }
 
 export class ValidationStore {
-  constructor(path, engineVersion, examples = developmentExamples()) {
-    this.path = path;
+  constructor(target, engineVersion, examples = developmentExamples()) {
+    this.log = asLog(target);
+    this.path = this.log.path;
     this.engineVersion = engineVersion;
     this.examples = examples;
     // Older quality runs remain in the audit file; only impact runs are used by this workflow.
-    this.events = existsSync(path) ? readFileSync(path, 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse) : [];
+    this.events = this.log.read().trim().split('\n').filter(Boolean).map(JSON.parse);
   }
   write(event) {
     const entry = structuredClone({ id: randomUUID(), created_at: new Date().toISOString(), ...event });
-    mkdirSync(dirname(this.path), { recursive: true });
-    appendFileSync(this.path, `${JSON.stringify(entry)}\n`);
+    this.log.append(`${JSON.stringify(entry)}\n`);
     this.events.push(entry);
     return entry;
   }

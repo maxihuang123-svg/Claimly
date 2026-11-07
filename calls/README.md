@@ -22,10 +22,9 @@ must be served over HTTPS for the microphone to work, for example through `cloud
 
 ## Layout
 
-- `api.js`: the `/api/calls*` routes, written against web `Request`/`Response` so they also run as a Cloudflare Function.
-- `contacts.js`: append-only contact log on disk. On Cloudflare this becomes D1 or KV with the same methods.
-- `node.js`: mounts `api.js` on the Node server and reads `.env.local`.
-- `access.js`: the optional access code.
+- `api.js`: the `/api/calls*` routes, on web `Request`/`Response`, mounted by `../handler.js` on Node and on Cloudflare.
+- `contacts.js`: append-only contact log, on disk with Node and in Durable Object storage on Cloudflare.
+- `access.js`: the optional access code. On Cloudflare it runs in the Worker, in front of everything.
 - `agent-config.js`: the agent's prompt and the answers it collects.
 - `../public/missing.js`: what the agent may ask for. Shared by server and browser.
 - `../public/calls.js`, `phone.js`, `ringtone.js`, `calls.css`: the page and the call screen.

@@ -7,3 +7,7 @@ data/validation.jsonl
 data/outcomes.jsonl
 data/contacts.jsonl
 .env.local
+node_modules/
+.wrangler/
+worker/generated.js
+.dev.vars

@@ -1,20 +1,20 @@
 import { randomUUID } from 'node:crypto';
-import { appendFileSync, existsSync, readFileSync } from 'node:fs';
+import { asLog } from '../storage.js';
 
 // Every attempt to reach a claimant, with what they said. Append-only like the review log:
 // a contact is created once and then patched as the call progresses.
 // What a claimant says is stored here, never written into the case.
 export class ContactLog {
-  constructor(path) {
-    this.path = path;
+  constructor(target) {
+    this.log = asLog(target);
+    this.path = this.log.path;
     this.byId = new Map();
-    if (!existsSync(path)) return;
-    readFileSync(path, 'utf8').split('\n').forEach((line, index) => {
+    this.log.read().split('\n').forEach((line, index) => {
       if (!line.trim()) return;
       try {
         this.#apply(JSON.parse(line));
       } catch {
-        console.warn(`Skipping unreadable line ${index + 1} in ${path}`);
+        console.warn(`Skipping unreadable line ${index + 1} in ${this.path}`);
       }
     });
   }
@@ -27,7 +27,7 @@ export class ContactLog {
   }
 
   #write(event) {
-    appendFileSync(this.path, `${JSON.stringify(event)}\n`);
+    this.log.append(`${JSON.stringify(event)}\n`);
     this.#apply(event);
   }
 

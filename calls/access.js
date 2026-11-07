@@ -1,3 +1,4 @@
+import { Buffer } from 'node:buffer';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 
 // A shared access code for when the app is reachable from outside (a tunnel or a deploy).
@@ -36,57 +37,53 @@ const page = (error) => `<!doctype html>
   <button type="submit">Open</button>
 </form></body></html>`;
 
+const html = (body, status, headers = {}) => new Response(body, {
+  status, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', ...headers },
+});
+
 async function readCode(request) {
-  let body = '';
-  for await (const chunk of request) {
-    body += chunk;
-    if (body.length > 1024) break;
-  }
+  const body = (await request.text()).slice(0, 1024);
   return new URLSearchParams(body).get('code')?.trim() ?? '';
 }
 
-// Returns a handler that answers the request itself (login page, 401) and resolves to true,
-// or resolves to false when the request may go on.
+// Returns a handler that answers the request itself (login page, 401) with a Response,
+// or resolves to null when the request may go on. Web Request/Response, so it runs on
+// Node (server.js) and in the Cloudflare Worker alike.
 export function accessGate(code) {
-  if (!code) return async () => false;
+  if (!code) return async () => null;
   const token = tokenFor(code);
   let failures = [];
 
-  return async (request, response) => {
-    const { pathname } = new URL(request.url, 'http://localhost');
-    if (hasAccess(request.headers.cookie, code)) return false;
+  return async (request) => {
+    const url = new URL(request.url);
+    if (hasAccess(request.headers.get('cookie'), code)) return null;
 
-    if (request.method === 'POST' && pathname === '/access') {
+    if (request.method === 'POST' && url.pathname === '/access') {
       const now = Date.now();
       failures = failures.filter((time) => now - time < 60_000);
       if (failures.length >= MAX_FAILURES_PER_MINUTE) {
-        response.writeHead(429, { 'Content-Type': 'text/html; charset=utf-8' });
-        response.end(page('Too many wrong codes. Wait a minute and try again.'));
-        return true;
+        return html(page('Too many wrong codes. Wait a minute and try again.'), 429);
       }
       const sent = await readCode(request);
       if (sent.length === code.length && timingSafeEqual(Buffer.from(sent), Buffer.from(code))) {
-        const secure = request.headers['x-forwarded-proto'] === 'https' ? '; Secure' : '';
-        response.writeHead(303, {
-          Location: '/',
-          'Set-Cookie': `${COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${MAX_AGE_SECS}${secure}`,
+        const https = url.protocol === 'https:' || request.headers.get('x-forwarded-proto') === 'https';
+        return new Response(null, {
+          status: 303,
+          headers: {
+            Location: '/',
+            'Set-Cookie': `${COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${MAX_AGE_SECS}${https ? '; Secure' : ''}`,
+          },
         });
-        response.end();
-        return true;
       }
       failures.push(now);
-      response.writeHead(401, { 'Content-Type': 'text/html; charset=utf-8' });
-      response.end(page('That code is not right.'));
-      return true;
+      return html(page('That code is not right.'), 401);
     }
 
-    if (pathname.startsWith('/api/')) {
-      response.writeHead(401, { 'Content-Type': 'application/json; charset=utf-8' });
-      response.end(JSON.stringify({ error: 'Enter the access code first. Reload the page.' }));
-    } else {
-      response.writeHead(401, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
-      response.end(page(''));
+    if (url.pathname.startsWith('/api/')) {
+      return new Response(JSON.stringify({ error: 'Enter the access code first. Reload the page.' }), {
+        status: 401, headers: { 'Content-Type': 'application/json; charset=utf-8' },
+      });
     }
-    return true;
+    return html(page(''), 401);
   };
 }

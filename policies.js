@@ -1,5 +1,5 @@
-import { appendFileSync, existsSync, readFileSync } from 'node:fs';
 import { conditionText, FIELDS, OPERATORS } from './engine.js';
+import { asLog } from './storage.js';
 
 export const SCHEMA_VERSION = 1;
 
@@ -134,17 +134,17 @@ const cleanDraft = (input) => {
 // change a policy is a new version. There is one draft at a time, and it has no version
 // number until it is activated.
 export class PolicyStore {
-  constructor(path) {
-    this.path = path;
+  constructor(target) {
+    this.log = asLog(target);
+    this.path = this.log.path;
     this.versions = [POLICY_V1];
     this.draft = null;
-    if (!existsSync(path)) return;
-    readFileSync(path, 'utf8').split('\n').forEach((line, index) => {
+    this.log.read().split('\n').forEach((line, index) => {
       if (!line.trim()) return;
       try {
         this.#apply(JSON.parse(line));
       } catch {
-        console.warn(`Skipping unreadable line ${index + 1} in ${path}`);
+        console.warn(`Skipping unreadable line ${index + 1} in ${this.path}`);
       }
     });
   }
@@ -159,7 +159,7 @@ export class PolicyStore {
   }
 
   #write(event) {
-    appendFileSync(this.path, `${JSON.stringify({
+    this.log.append(`${JSON.stringify({
       schema_version: SCHEMA_VERSION, created_at: new Date().toISOString(), ...event,
     })}\n`);
     this.#apply(event);

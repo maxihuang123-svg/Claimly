@@ -1,9 +1,8 @@
-import { appendFileSync, existsSync, readFileSync, mkdirSync } from 'node:fs';
-import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { hash } from './validation.js';
 import { RECOMMENDATIONS } from './engine.js';
 import { ReviewError } from './reviews.js';
+import { asLog } from './storage.js';
 
 export const ratio = (count, total) => ({ count, total, rate: total ? count / total : null });
 export function quality(rows, side) {
@@ -14,9 +13,10 @@ export function quality(rows, side) {
   };
 }
 export class OutcomeStore {
-  constructor(path) {
-    this.path = path;
-    this.events = existsSync(path) ? readFileSync(path, 'utf8').split('\n').filter(Boolean).map(JSON.parse) : [];
+  constructor(target) {
+    this.log = asLog(target);
+    this.path = this.log.path;
+    this.events = this.log.read().split('\n').filter(Boolean).map(JSON.parse);
   }
   record(item, input) {
     const assessor = String(input.assessor ?? '').trim();
@@ -25,8 +25,7 @@ export class OutcomeStore {
     if (!RECOMMENDATIONS.includes(input.expected)) throw new ReviewError('Choose the correct next step at the time of triage.');
     const event = structuredClone({ id: randomUUID(), created_at: new Date().toISOString(), case_id: item.case.case_id,
       assessor, evidence, expected: input.expected, automated: item.automated, facts: item.case });
-    mkdirSync(dirname(this.path), { recursive: true });
-    appendFileSync(this.path, `${JSON.stringify(event)}\n`);
+    this.log.append(`${JSON.stringify(event)}\n`);
     this.events.push(event);
     return event;
   }
