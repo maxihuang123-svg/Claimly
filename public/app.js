@@ -1,20 +1,21 @@
+import { createMeasurementUI } from './measurement.js';
+import { createValidationUI } from './validation.js';
 const OUTCOMES = {
-  routine_processing: { name: 'Routine processing', help: 'Enters the normal downstream process. Not a payment approval.' },
-  request_information: { name: 'Request information', help: 'Ask for what is missing first.' },
-  human_review: { name: 'Human review', help: 'Stays with a person.' },
+  routine_processing: { name: 'Routine processing', action: 'Send to routine processing.' },
+  request_information: { name: 'Request information', action: 'Request information.' },
+  human_review: { name: 'Human review', action: 'Send to human review.', help: 'Stays with a person.' },
 };
-const REPAIR_TYPES = { standard: 'Standard repair', ev_high_voltage_battery: 'EV high-voltage battery' };
-const REVIEWER_KEY = 'claims-review.reviewer';
+const NOT_PROVIDED = 'Not provided';
 const TOAST_MS = 6000;
 
 const svg = (body, width = 1.8) => `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
 const ICONS = {
   check: svg('<path d="M3 8.5l3.2 3.2L13 4.8"/>', 2),
-  swap: svg('<path d="M2.5 8h10M9 4.5L12.5 8 9 11.5"/>', 2),
   flag: svg('<path d="M3.5 14V2.5h8.5L10 6l2 3.5H3.5"/>'),
   blank: svg('<path d="M3 8h10"/>'),
-  chevron: svg('<path d="M6 3.5L10.5 8 6 12.5"/>'),
+  arrow: svg('<path d="M2.5 8h11M9.5 4l4 4-4 4"/>', 1.5),
   table: svg('<path d="M2.5 3.5h11v9h-11zM2.5 6.5h11M6.5 6.5v6"/>', 1.5),
+  document: svg('<path d="M4 2.5h5.5L12.5 5.5v8H4zM6.5 8h4M6.5 10.5h4"/>', 1.5),
 };
 const STATE_LABELS = {
   pass: [ICONS.check, 'OK'],
@@ -25,12 +26,21 @@ const STATE_LABELS = {
 // Sidebar pages. To add one, add an entry here with a render function.
 const PAGES = [
   { id: 'claims', label: 'Claims review', icon: ICONS.table, render: renderClaims },
+  { id: 'policies', label: 'Policies', icon: ICONS.document, render: renderPolicies },
+  { id: 'measurement', label: 'Measurement', icon: ICONS.flag, render: () => measurementUI.render() },
+  { id: 'validation', label: 'Validation', icon: ICONS.check, render: () => validationUI.render() },
 ];
+
+const RULE_HEADINGS = {
+  human_review: 'Send to human review if any of these is true',
+  request_information: 'Otherwise, ask for information if any of these is true',
+  routine_processing: 'Otherwise, send to routine processing',
+};
+const DRAFT_SAVE_DELAY_MS = 300;
 
 const dom = {
   nav: document.getElementById('nav'),
   page: document.getElementById('page'),
-  reviewer: document.getElementById('reviewer'),
   toast: document.getElementById('toast'),
 };
 
@@ -40,16 +50,30 @@ const state = {
   items: [],
   recommendations: [],
   reasons: [],
-  filter: 'all',
+  filter: 'queue',
   expandedId: null,
+  popupPlacement: null,
+  reviewer: '',
   drafts: new Map(),
   busy: new Set(),
   error: null,
   banner: null,
   importing: false,
+  policyVersion: null,
+  policyStatus: 'loading',
+  policyData: null,
+  openPolicy: null,
+  policyEditing: false,
+  policyForm: null,
+  policyChoices: null,
+  policyConfirm: null,
+  policyBusy: false,
+  policyError: null,
 };
 
 let toastTimer;
+let draftTimer = null;
+let draftSaves = Promise.resolve();
 
 const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]
@@ -62,40 +86,47 @@ const outcomeName = (code) => OUTCOMES[code].name;
 const lowerFirst = (text) => text[0].toLowerCase() + text.slice(1);
 const plural = (count, noun) => `${count} ${noun}${count === 1 ? '' : 's'}`;
 
-function readStoredReviewer() {
-  try { return localStorage.getItem(REVIEWER_KEY) ?? ''; } catch { return ''; }
-}
-function storeReviewer(name) {
-  try { localStorage.setItem(REVIEWER_KEY, name); } catch { /* The name just is not remembered. */ }
-}
-
 const findItem = (id) => state.items.find((item) => item.case.case_id === id);
 
-// Only cases the automation sent to human review appear on this page.
+// The review queue is what the automation sent to human review. Everything else stays
+// one filter away, so any recommendation can be opened and checked.
 const reviewItems = () => state.items.filter((item) => item.automated.recommendation === 'human_review');
+const routedItems = () => state.items.filter((item) => item.automated.recommendation !== 'human_review');
 
 function visibleItems() {
+  if (state.filter === 'recheck') return state.items.filter((item) => item.needs_recheck);
+  if (state.filter === 'routed') return routedItems();
   const items = reviewItems();
   if (state.filter === 'todo') return items.filter((item) => !item.review);
   if (state.filter === 'done') return items.filter((item) => item.review);
   return items;
 }
 
+const reasonsFor = (item, decision) => {
+  const kind = decision === item.automated.recommendation ? 'confirm' : 'change';
+  return state.reasons.filter((reason) => (!reason.kind || reason.kind === kind)
+    && (!reason.only_for || reason.only_for === item.automated.recommendation));
+};
+
+const alternatives = (item) => state.recommendations.filter((code) => code !== item.automated.recommendation);
+
+const preselectedReason = (item, decision) => (
+  reasonsFor(item, decision).find((reason) => reason.preselected)?.code ?? null
+);
+
 function draftFor(item) {
   const id = item.case.case_id;
   if (!state.drafts.has(id)) {
+    const previous = item.review?.outcome === 'confirmed' ? null : item.review;
     state.drafts.set(id, {
-      decision: item.review?.final_recommendation ?? null,
-      reason: item.review?.reason_code ?? 'resolved_after_review',
-      note: item.review?.note ?? '',
+      changing: false,
+      decision: previous?.final_recommendation ?? null,
+      reason: previous?.reason_code ?? preselectedReason(item, alternatives(item)[0]),
+      note: previous?.note ?? '',
     });
   }
   return state.drafts.get(id);
 }
-
-const reasonsFor = (item) => state.reasons.filter(
-  (reason) => !reason.only_for || reason.only_for === item.automated.recommendation,
-);
 
 /* Shell */
 
@@ -122,6 +153,7 @@ function renderHead() {
   ].filter(Boolean).join('. ');
   return `<div class="page-head">
     <h1>Claims review</h1>
+    <button type="button" class="link policy-link" data-page="policies">Current policy ${escapeHtml(state.policyVersion)}</button>
     <p class="progress">${progress}</p>
     <button type="button" class="button" data-import ${state.importing ? 'disabled' : ''}>${state.importing ? 'Importing' : 'Import CSV'}</button>
     <input type="file" id="file" accept=".csv,text/csv" hidden>
@@ -134,159 +166,145 @@ function renderFilters() {
   const items = reviewItems();
   const reviewed = items.filter((item) => item.review).length;
   const filters = [
-    ['all', 'All', items.length],
+    ...(state.items.some((item) => item.needs_recheck) ? [['recheck', 'Policy recheck', state.items.filter((item) => item.needs_recheck).length]] : []),
+    ['queue', 'Human review', items.length],
     ['todo', 'To review', items.length - reviewed],
     ['done', 'Reviewed', reviewed],
+    ['routed', 'Routed automatically', routedItems().length],
   ];
   return `<div class="filters" role="group" aria-label="Filter claims">${filters.map(([key, label, count]) => (
     `<button type="button" data-filter="${key}" aria-pressed="${state.filter === key}">${label} ${count}</button>`
   )).join('')}</div>`;
 }
 
-const isQuickApproved = (review) => review.outcome === 'resolved' && review.final_recommendation === 'routine_processing';
-
-function renderApprove(item) {
-  const id = escapeHtml(item.case.case_id);
-  const busy = state.busy.has(item.case.case_id) ? 'disabled' : '';
-  if (item.review && !isQuickApproved(item.review)) {
-    return `<button type="button" class="approve" data-state="changed" data-toggle="${id}" title="Reviewed. Open to edit."
-      aria-label="${id}: reviewed, open to edit">${ICONS.swap}</button>`;
-  }
-  const label = item.review ? 'Sent to routine processing. Click to undo.' : 'Send to routine processing';
-  return `<button type="button" class="approve" data-state="${item.review ? 'approved' : 'open'}" data-approve="${id}" title="${label}"
-    aria-label="${id}: ${label}" aria-pressed="${Boolean(item.review)}" ${busy}>${ICONS.check}</button>`;
-}
-
 function renderReviewCell(item) {
-  if (!item.review) return '<span class="pending">Not reviewed</span>';
+  const id = escapeHtml(item.case.case_id);
+  if (!item.review) {
+    const needed = item.automated.recommendation === 'human_review' || item.needs_recheck;
+    if (!needed) return `<button type="button" class="link review-edit" data-toggle="${id}" aria-label="Review recommendation for ${id}">Review decision</button>`;
+    return `<button type="button" class="link review-edit" data-toggle="${id}">Review decision</button>`;
+  }
   const code = item.review.final_recommendation;
-  return `<span class="pill" data-outcome="${code}">${outcomeName(code)}</span>`;
+  return `<button type="button" class="pill review-status" data-outcome="${code}" data-toggle="${id}"
+    aria-label="${outcomeName(code)} — edit review for ${id}">${outcomeName(code)}</button>`;
 }
 
 function renderRow(item) {
   const { case: record, automated } = item;
   const id = escapeHtml(record.case_id);
-  const open = state.expandedId === record.case_id;
-  const quote = record.quote_eur === null
-    ? '<span class="blank">Blank</span>'
-    : `€${record.quote_eur.toLocaleString('en-US')}`;
-  const status = record.case_status ? humanize(record.case_status) : '<span class="blank">Blank</span>';
+  const rule = automated.rules.find((rule) => rule.result === 'matched');
+  const ruleText = `Policy ${automated.policy_version}, Rule ${rule.number}: ${rule.title}. ${rule.checks.filter((check) => check.state !== 'pass').map((check) => `${check.label}: ${check.test} (this claim: ${check.value})`).join('; ')}`;
+  const quote = record.quote_eur === null ? NOT_PROVIDED : `€${record.quote_eur.toLocaleString('en-US')}`;
+  const status = record.case_status ? humanize(record.case_status) : NOT_PROVIDED;
 
-  return `<tr class="row" data-row="${id}" data-open="${open}">
+  return `<tr class="row" data-row="${id}">
     <td class="c-case">${id}</td>
     <td class="c-summary" title="${escapeHtml(record.claim_summary)}">${escapeHtml(record.claim_summary)}</td>
     <td class="c-quote">${quote}</td>
     <td class="c-status">${status}</td>
-    <td class="c-why" title="${escapeHtml(automated.explanation)}">${escapeHtml(automated.explanation)}</td>
+    <td class="c-rec"><span class="pill rule-trigger" tabindex="0" aria-describedby="rule-tooltip" data-rule="${escapeHtml(ruleText)}" data-outcome="${automated.recommendation}">${outcomeName(automated.recommendation)}</span></td>
+    <td class="c-why" title="${escapeHtml(automated.explanation)}">${escapeHtml(automated.reason)}</td>
     <td class="c-review">${renderReviewCell(item)}</td>
-    <td class="c-check">${renderApprove(item)}</td>
-    <td class="c-open"><button type="button" class="chevron" data-toggle="${id}" aria-expanded="${open}" aria-label="${open ? 'Close' : 'Open'} ${id}">${ICONS.chevron}</button></td>
-  </tr>${open ? `<tr class="detail"><td colspan="8"><div class="detail-grid">${renderTrace(item)}${renderReview(item)}</div></td></tr>` : ''}`;
-}
-
-function ruleResultText(rule) {
-  if (rule.result === 'matched') return `Matched: ${lowerFirst(outcomeName(rule.outcome))}`;
-  if (rule.result === 'not_reached') return rule.would_also_match ? 'Not reached, would also match' : 'Not reached';
-  const blanks = rule.checks.some((check) => check.state === 'unknown');
-  if (rule.number === 1) return blanks ? 'No known trigger' : 'No trigger';
-  return 'Nothing missing';
-}
-
-function renderCheck(check) {
-  const [icon, label] = STATE_LABELS[check.state];
-  return `<tr data-state="${check.state}">
-    <td class="col-label" title="${escapeHtml(check.field)}">${escapeHtml(check.label)}</td>
-    <td class="col-value">${escapeHtml(check.value)}</td>
-    <td class="col-test">${escapeHtml(check.test)}</td>
-    <td><span class="check-state">${icon}<span>${label}</span></span></td>
   </tr>`;
 }
 
-function renderRule(rule) {
-  const table = rule.checks.length ? `<table class="checks">
-    <thead><tr>
-      <th scope="col" class="col-label">Check</th>
-      <th scope="col" class="col-value">This claim</th>
-      <th scope="col" class="col-test">Policy</th>
-      <th scope="col">Result</th>
-    </tr></thead>
-    <tbody>${rule.checks.map(renderCheck).join('')}</tbody>
-  </table>` : '';
-  return `<li class="rule" data-result="${rule.result}" data-outcome="${rule.outcome}">
-    <span class="rule-node"></span>
-    <div class="rule-head">
-      <h3 class="rule-title">Rule ${rule.number}. ${escapeHtml(rule.title)}</h3>
-      <span class="rule-result">${ruleResultText(rule)}</span>
-    </div>
-    ${table}
-  </li>`;
-}
+const formatTime = (iso) => new Date(iso).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+const reasonLabel = (code) => state.reasons.find((reason) => reason.code === code)?.label;
 
-function renderTrace(item) {
-  const { case: record, automated } = item;
-  const decidingRule = automated.rules.find((rule) => rule.result === 'matched');
-  const repair = record.repair_type ? (REPAIR_TYPES[record.repair_type] ?? humanize(record.repair_type)) : 'Repair type blank';
-  const claimType = record.claim_type ? humanize(record.claim_type) : 'Claim type blank';
-  return `<section class="trace" aria-label="Why this decision was made">
-    <h2 class="detail-summary">${escapeHtml(record.claim_summary) || 'No summary provided'}</h2>
-    <p class="detail-meta"><span>${escapeHtml(claimType)}</span><span>${escapeHtml(repair)}</span></p>
-    <div class="verdict" data-outcome="${automated.recommendation}">
-      <p class="verdict-line">
-        <span class="verdict-outcome">${outcomeName(automated.recommendation)}</span>
-        <span class="verdict-source">Automated, Rule ${decidingRule.number}, policy ${escapeHtml(automated.policy_version)}</span>
-      </p>
-      <p>${escapeHtml(automated.explanation)}</p>
+function renderReviewPopup(item) {
+  return `<section class="review-popup" popover="auto" role="dialog" aria-labelledby="review-title">
+    <header class="popup-head"><div><h2 id="review-title">Review ${escapeHtml(item.case.case_id)}</h2>
+      <p class="notice">${escapeHtml(item.case.claim_summary)}</p></div>
+      <button type="button" class="button" data-close-review aria-label="Close review">Close</button></header>
+    ${item.needs_recheck ? `<p class="validation-alert">Policy ${escapeHtml(item.automated.policy_version)} requires another look. ${escapeHtml(item.automated.explanation)}${item.retained_review ? ` Previous review by ${escapeHtml(item.retained_review.reviewer)}: ${outcomeName(item.retained_review.final_recommendation)}. Preserved in history.` : ''}</p>` : ''}
+    <div class="review-original">
+      <span class="review-label">System recommendation</span>
+      <div><span class="pill" data-outcome="${item.automated.recommendation}">${outcomeName(item.automated.recommendation)}</span><span class="notice">Policy ${escapeHtml(item.automated.policy_version)}</span></div>
+      <p class="notice">${escapeHtml(item.automated.explanation)}</p>
     </div>
-    <ol class="path" aria-label="How the policy was applied">${automated.rules.map(renderRule).join('')}</ol>
+    ${renderAction(item)}
+    ${renderReviewHistory(item)}
   </section>`;
 }
 
-function reviewNotice(item) {
-  if (!item.review) return '';
-  const { reviewer, created_at: createdAt, outcome } = item.review;
-  const time = new Date(createdAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
-  return `<p class="notice"><strong>${outcome === 'changed' ? 'Changed' : 'Resolved'}</strong> by
-    ${escapeHtml(reviewer)}, ${escapeHtml(time)}.
-    <button type="button" class="link" data-undo="${escapeHtml(item.case.case_id)}">Undo</button></p>`;
+function renderReviewHistory(item) {
+  if (!item.history?.length) return '';
+  return `<details class="review-history"><summary>Review history · ${item.history.length}</summary>
+    <ol class="history">${[...item.history].reverse().map((event) => `<li>
+      <strong>${escapeHtml(event.reviewer)}</strong> · <time datetime="${escapeHtml(event.created_at)}">${escapeHtml(formatTime(event.created_at))}</time>
+      ${event.event === 'retraction' ? '<p>Review withdrawn. The earlier record is preserved.</p>' : `<p>${outcomeName(event.automated.recommendation)} ${ICONS.arrow} <strong>${outcomeName(event.final_recommendation)}</strong></p><p>${escapeHtml(reasonLabel(event.reason_code) ?? event.reason_code)}${event.note ? `: ${escapeHtml(event.note)}` : ''}</p><p class="notice">Policy ${escapeHtml(event.automated.policy_version)} · ${escapeHtml(event.automated.rule_id)}</p>`}
+    </li>`).join('')}</ol></details>`;
 }
 
-function renderReview(item) {
-  const draft = draftFor(item);
-  const saving = state.busy.has(item.case.case_id);
+function renderReviewed(item) {
+  const { reviewer, created_at: createdAt, outcome, final_recommendation: code, reason_code: reasonCode, note } = item.review;
+  const reason = [reasonLabel(reasonCode), note].filter(Boolean).join(': ');
+  return `<p class="reviewed">
+    <span class="pill" data-outcome="${code}">${outcomeName(code)}</span>
+    <span>${humanize(outcome)}${reviewer ? ` by ${escapeHtml(reviewer)}` : ''}, ${escapeHtml(formatTime(createdAt))}.${reason ? ` ${escapeHtml(reason)}.` : ''}</span>
+  </p>
+  <div class="action-row">
+    <button type="button" class="button" data-change>Change decision</button>
+  </div>`;
+}
 
-  // A case already in human review has to leave it, so that option is not offered.
-  const options = state.recommendations.filter((code) => code !== item.automated.recommendation).map((code) => `
-    <button type="button" class="option" data-decision="${code}" data-outcome="${code}" aria-pressed="${draft.decision === code}">
-      <span class="option-name">${outcomeName(code)}</span>
-      <span class="option-help">${OUTCOMES[code].help}</span>
-    </button>`).join('');
-
-  const reasons = `<div role="group" aria-labelledby="reason-label">
-    <span class="field-label" id="reason-label">Reason</span>
-    <div class="reasons">${reasonsFor(item).map((reason) => `
-      <button type="button" class="reason" data-reason="${reason.code}" aria-pressed="${draft.reason === reason.code}">${escapeHtml(reason.label)}</button>`).join('')}
+function renderChangeForm(item, draft) {
+  const segments = alternatives(item).map((code) => `<button type="button" class="segment" data-decision="${code}"
+    data-outcome="${code}" aria-pressed="${draft.decision === code}">${outcomeName(code)}</button>`).join('');
+  const reasons = reasonsFor(item, draft.decision ?? alternatives(item)[0]).map((reason) => `<button type="button" role="option" aria-selected="${draft.reason === reason.code}" data-reason="${reason.code}"><span>${escapeHtml(reason.label)}</span>${draft.reason === reason.code ? ICONS.check : ''}</button>`).join('');
+  const noteRequired = state.reasons.find((reason) => reason.code === draft.reason)?.note_required;
+  return `<div class="change-form">
+    <div>
+      <span class="review-label">Corrected recommendation</span>
+      <div class="segments" role="group" aria-label="Corrected recommendation">${segments}</div>
+      ${draft.decision && OUTCOMES[draft.decision].help ? `<p class="notice segment-help">${OUTCOMES[draft.decision].help}</p>` : ''}
+    </div>
+    <div class="review-fields">
+      <div class="field reason-picker"><span id="reason-label">Reason</span>
+        <button type="button" class="reason-trigger" id="reason" data-reason-menu aria-haspopup="listbox" aria-expanded="false" aria-labelledby="reason-label reason-value"><span id="reason-value">${escapeHtml(reasonLabel(draft.reason) ?? 'Choose a reason')}</span>${svg('<path d="m4 6 4 4 4-4"/>')}</button>
+        <div class="reason-menu" role="listbox" aria-labelledby="reason-label" hidden>${reasons}</div>
+      </div>
+      <label class="field field-grow"><span>Note${noteRequired ? '' : ' (optional)'}</span>
+        <textarea class="text-input" id="note" rows="2" ${noteRequired ? 'required' : ''}>${escapeHtml(draft.note)}</textarea>
+      </label>
     </div>
   </div>`;
+}
 
-  const noteRequired = state.reasons.find((reason) => reason.code === draft.reason)?.note_required;
-  const saveLabel = saving ? 'Saving'
-    : draft.decision ? `Send to ${lowerFirst(outcomeName(draft.decision))}` : 'Choose a next step';
+function renderAction(item) {
+  const draft = draftFor(item);
+  const saving = state.busy.has(item.case.case_id);
+  const error = state.error ? `<p class="error" role="alert">${escapeHtml(state.error)}</p>` : '';
+  const closed = item.case.case_status === 'closed'
+    ? '<p class="notice">This claim is closed. Your review is recorded as feedback on the decision.</p>' : '';
+  if (item.review && !draft.changing) return `<div class="action">${renderReviewed(item)}${closed}</div>`;
 
-  return `<section class="review" aria-label="Your review">
-    <div role="group" aria-labelledby="decision-label">
-      <span class="field-label" id="decision-label">Next step</span>
-      <div class="options">${options}</div>
+  const recommended = item.automated.recommendation;
+  const disabled = saving ? 'disabled' : '';
+  const showForm = draft.changing || recommended === 'human_review';
+  const buttons = showForm
+    ? `<button type="button" class="save" data-save ${disabled} ${!draft.decision ? 'disabled' : ''}>${saving ? 'Saving…' : (recommended === 'human_review' ? 'Save review' : 'Save correction')}</button>
+       ${draft.changing ? '<button type="button" class="link" data-cancel-change>Cancel</button>' : ''}`
+    : `<button type="button" class="save" data-confirm ${disabled}>${saving ? 'Saving' : decisionLabel(item, recommended)}</button>
+       <button type="button" class="button" data-change>Change recommendation</button>`;
+  return `<div class="action">
+    ${showForm ? renderChangeForm(item, draft) : ''}
+    <div class="action-row">
+      <label class="field"><span>Reviewer</span>
+        <input type="text" class="text-input" id="reviewer" autocomplete="name" value="${escapeHtml(state.reviewer)}">
+      </label>
     </div>
-    ${reasons}
-    <div>
-      <label class="field-label" for="note">Note ${noteRequired ? '' : '<span class="optional">(optional)</span>'}</label>
-      <textarea id="note" rows="2" placeholder="What should the system learn from this case?">${escapeHtml(draft.note)}</textarea>
-    </div>
-    ${state.error ? `<p class="error" role="alert">${escapeHtml(state.error)}</p>` : ''}
-    <button type="button" class="save" data-save ${saving ? 'disabled' : ''}>${saveLabel}</button>
-    ${item.case.case_status === 'closed' ? '<p class="notice">This claim is closed. Your review is recorded as feedback on the decision.</p>' : ''}
-    ${reviewNotice(item)}
-  </section>`;
+    ${error}${closed}
+    <p class="notice">Your name, reason and policy version are saved with the original recommendation.</p>
+    <div class="review-footer">${buttons}</div>
+  </div>`;
+}
+
+function decisionLabel(item, code) {
+  const recommended = item.automated.recommendation;
+  if (code === recommended) return `Confirm ${lowerFirst(outcomeName(code))}`;
+  if (recommended === 'human_review') return OUTCOMES[code].action.slice(0, -1);
+  return `Change to ${lowerFirst(outcomeName(code))}`;
 }
 
 function renderTable() {
@@ -295,11 +313,16 @@ function renderTable() {
     return `<div class="state"><strong>No claims yet</strong>Import a CSV to start reviewing.<br>
       <button type="button" class="button" data-import>Import CSV</button></div>`;
   }
-  if (!reviewItems().length) {
+  if (!['routed', 'recheck'].includes(state.filter) && !reviewItems().length) {
     return '<div class="state"><strong>No cases need human review</strong>Every imported case was routed automatically.</div>';
   }
   if (!items.length) {
-    const message = state.filter === 'todo' ? 'Everything has been reviewed.' : 'Nothing reviewed yet.';
+    const message = {
+      recheck: 'No claims need a policy recheck.',
+      todo: 'Everything has been reviewed.',
+      done: 'Nothing reviewed yet.',
+      routed: 'Every imported case is in human review.',
+    }[state.filter];
     return `<div class="state"><strong>${message}</strong></div>`;
   }
   return `<table class="claims">
@@ -308,10 +331,9 @@ function renderTable() {
       <th scope="col" class="c-summary">Claim</th>
       <th scope="col" class="c-quote">Quote</th>
       <th scope="col" class="c-status">Status</th>
+      <th scope="col" class="c-rec">Recommendation</th>
       <th scope="col" class="c-why">Why</th>
       <th scope="col" class="c-review">Review</th>
-      <th scope="col" class="c-check"><span hidden>Send to routine processing</span></th>
-      <th scope="col" class="c-open"><span hidden>Open</span></th>
     </tr></thead>
     <tbody>${items.map(renderRow).join('')}</tbody>
   </table>`;
@@ -329,7 +351,170 @@ function renderClaims() {
       <button type="button" class="button" data-retry>Try again</button></div>`;
     return;
   }
-  dom.page.innerHTML = renderHead() + renderFilters() + renderTable();
+  const focusId = document.activeElement?.id;
+  const focusedDecision = document.activeElement?.dataset.decision;
+  dom.page.innerHTML = renderHead() + renderFilters() + renderTable()
+    + '<aside id="rule-tooltip" class="rule-tooltip" popover="manual" role="tooltip"></aside>'
+    + (state.expandedId ? renderReviewPopup(findItem(state.expandedId)) : '');
+  const popup = dom.page.querySelector('.review-popup');
+  if (popup) {
+    popup.showPopover();
+    positionReviewPopup();
+    popup.addEventListener('toggle', (event) => {
+      if (event.newState === 'closed' && popup.isConnected && state.expandedId) closeReview();
+    });
+    if (focusId) document.getElementById(focusId)?.focus({ preventScroll: true });
+    else if (focusedDecision) popup.querySelector(`[data-decision="${focusedDecision}"]`)?.focus({ preventScroll: true });
+  }
+}
+
+/* Policies page */
+
+const formatDate = (iso) => new Date(iso).toLocaleDateString([], { dateStyle: 'medium' });
+const nextVersion = () => `v${state.policyData.policies.length + 1}`;
+const currentPolicy = () => state.policyData.policies.find(
+  (policy) => policy.version === state.policyData.current_version,
+);
+
+// The quote check keeps its identity when its limit changes.
+const isQuote = (item) => item.field === 'quote_eur';
+const choiceId = (item) => [item.field, item.op, isQuote(item) ? '' : item.value].join('|');
+
+function ruleStep(outcome, body) {
+  return `<li class="rule" data-result="matched" data-outcome="${outcome}">
+    <span class="rule-node"></span>
+    <h3 class="rule-title">${RULE_HEADINGS[outcome]}</h3>
+    ${body}
+  </li>`;
+}
+
+function renderPolicyNotes() {
+  return `<details class="policy-notes">
+    <summary>How every policy works</summary>
+    <p>Rules apply in order. A known reason for human review takes priority over a missing document. Every recommendation records the policy version and rule that produced it.</p>
+    <p>Routine processing means the case may enter the insurer's normal downstream process. It does not mean payment is approved.</p>
+    <p>If an input field is absent or unreadable, no value is invented. Information is requested unless another known fact already requires human review. A blank is treated as an absent fact.</p>
+    <p>Case status is open or closed: open claims are still in process, closed claims have been completed. Claim type identifies the kind of claim. Repair type distinguishes standard repair from EV high-voltage battery work. Quote is the itemized repair estimate in euros. The remaining yes/no fields indicate whether evidence is present or a review trigger is known.</p>
+  </details>`;
+}
+
+function renderPolicyDoc(policy) {
+  const isCurrent = policy.version === state.policyData.current_version;
+  const since = policy.activated_at ? `Activated ${formatDate(policy.activated_at)}` : 'Original policy';
+  const steps = policy.rules.map((rule) => ruleStep(rule.outcome, rule.when_any.length
+    ? `<ul class="conditions">${rule.when_any.map((item) => `<li>${escapeHtml(item.text)}</li>`).join('')}</ul>`
+    : ''));
+  return `<section class="policy-main" aria-label="Policy ${escapeHtml(policy.version)}">
+    <h2 class="policy-title">Policy ${escapeHtml(policy.version)}</h2>
+    <p class="notice">${isCurrent ? '<strong>Current.</strong> ' : '<strong>Historic.</strong> '}${since}.</p>
+    <ol class="path">${steps.join('')}</ol>
+    ${renderPolicyNotes()}
+  </section>`;
+}
+
+function renderVersions() {
+  const { policies, current_version: current } = state.policyData;
+  return `<aside class="policy-side" aria-labelledby="versions-title">
+    <h2 class="field-label" id="versions-title">Versions</h2>
+    <div class="versions">${policies.map((policy) => `<button type="button" class="version"
+      data-policy-action="select" data-version="${escapeHtml(policy.version)}" aria-pressed="${policy.version === state.openPolicy}">
+      <span class="version-name">${escapeHtml(policy.version)}${policy.version === current ? ' <span class="version-tag">Current</span>' : ''}</span>
+      <span class="option-help">${escapeHtml(policy.change_note)}</span>
+    </button>`).join('')}</div>
+  </aside>`;
+}
+
+function renderChoice(outcome, choice, checked) {
+  const box = `<input type="checkbox" data-choice="${escapeHtml(choiceId(choice))}" data-rule-outcome="${outcome}" ${checked ? 'checked' : ''}`;
+  if (isQuote(choice)) {
+    return `<div class="choice">${box} id="quote-check" aria-label="Use a quote limit">
+      <label for="quote-check">Quote is over</label>
+      <span class="money">€<input type="number" id="quote-limit" min="0" step="any" aria-label="Quote limit in euros"
+        value="${escapeHtml(choice.value)}" ${checked ? '' : 'disabled'}></span>
+    </div>`;
+  }
+  const text = choice.text ?? `${choice.field} ${choice.op} ${choice.value}`;
+  return `<label class="choice">${box}><span>${escapeHtml(text)}</span></label>`;
+}
+
+function renderDraftForm() {
+  const steps = state.policyForm.rules.map((rule) => {
+    const choices = state.policyChoices[rule.outcome];
+    if (!choices) return ruleStep(rule.outcome, '');
+    const on = new Set(rule.when_any.map(choiceId));
+    return ruleStep(rule.outcome, `<div class="choices">${choices
+      .map((choice) => renderChoice(rule.outcome, choice, on.has(choiceId(choice)))).join('')}</div>`);
+  });
+  return `<section class="policy-main" aria-label="Rules in this draft"><ol class="path">${steps.join('')}</ol></section>`;
+}
+
+function renderDraftActions() {
+  const busy = state.policyBusy ? 'disabled' : '';
+  const { errors } = state.policyData.draft;
+  if (state.policyConfirm === 'discard') {
+    return `<p class="notice"><strong>Discard this draft?</strong> The current policy stays as it is.</p>
+    <button type="button" class="button" data-policy-action="discard" ${busy}>Discard draft</button>
+    <button type="button" class="link" data-policy-action="cancelConfirm">Keep draft</button>`;
+  }
+  return `${errors.length ? `<ul class="todo">${errors.map((error) => `<li>${escapeHtml(error)}</li>`).join('')}</ul>` : ''}
+    <button type="button" class="save" data-policy-action="reviewDraft" ${errors.length ? 'disabled' : busy}>Review draft</button>
+    <button type="button" class="link" data-policy-action="askDiscard">Discard draft</button>`;
+}
+
+// This part redraws on every autosave. The note stays outside it, so typing keeps focus.
+function renderDraftStatus() {
+  return `
+    ${state.policyError ? `<p class="error" role="alert">${escapeHtml(state.policyError)}</p>` : ''}
+    ${renderDraftActions()}`;
+}
+
+function refreshDraftStatus() {
+  const status = document.getElementById('draft-status');
+  if (status) status.innerHTML = renderDraftStatus();
+}
+
+function renderDraftPage() {
+  dom.page.innerHTML = `<div class="page-head">
+    <h1>Draft of ${nextVersion()}</h1>
+    <p class="progress">Based on ${escapeHtml(state.policyData.current_version)}. Changes save automatically.</p>
+    <button type="button" class="button" data-policy-action="back">Back to policies</button>
+  </div>
+  <div class="policy-grid">
+    ${renderDraftForm()}
+    <aside class="policy-side" aria-label="Finish this draft">
+      <div>
+        <label class="field-label" for="policy-note">What changed, and why?</label>
+        <textarea id="policy-note" rows="3">${escapeHtml(state.policyForm.change_note)}</textarea>
+      </div>
+      <div class="draft-status" id="draft-status">${renderDraftStatus()}</div>
+    </aside>
+  </div>`;
+}
+
+function renderPolicies() {
+  if (state.policyStatus === 'loading' && !state.policyData) {
+    dom.page.innerHTML = `<div class="page-head"><h1>Policies</h1></div>
+      <div aria-label="Loading policies">${'<div class="skeleton"></div>'.repeat(4)}</div>`;
+    return;
+  }
+  if (state.policyStatus === 'failed') {
+    dom.page.innerHTML = `<div class="page-head"><h1>Policies</h1></div>
+      <div class="state"><strong>Policies could not be loaded</strong>Check that the server is running with npm start, then try again.<br>
+      <button type="button" class="button" data-policy-action="reload">Try again</button></div>`;
+    return;
+  }
+  const { policies, draft } = state.policyData;
+  if (state.policyEditing && draft) {
+    renderDraftPage();
+    return;
+  }
+  const open = policies.find((policy) => policy.version === state.openPolicy) ?? currentPolicy();
+  dom.page.innerHTML = `<div class="page-head">
+    <h1>Policies</h1>
+    <button type="button" class="button" data-policy-action="edit" ${state.policyBusy ? 'disabled' : ''}>${draft ? 'Continue draft' : 'Edit policy'}</button>
+  </div>
+  ${state.policyError ? `<div class="banner" role="alert"><span>${escapeHtml(state.policyError)}</span></div>` : ''}
+  <div class="policy-grid">${renderPolicyDoc(open)}${renderVersions()}</div>`;
 }
 
 /* Toast */
@@ -339,10 +524,9 @@ function hideToast() {
   dom.toast.hidden = true;
 }
 
-function showToast(message, undoCaseId) {
+function showToast(message) {
   clearTimeout(toastTimer);
-  dom.toast.innerHTML = `<span>${escapeHtml(message)}</span>`
-    + (undoCaseId ? `<button type="button" class="link" data-undo="${escapeHtml(undoCaseId)}">Undo</button>` : '');
+  dom.toast.innerHTML = `<span>${escapeHtml(message)}</span>`;
   dom.toast.hidden = false;
   toastTimer = setTimeout(hideToast, TOAST_MS);
 }
@@ -372,22 +556,77 @@ function applyCases(data) {
   state.items = data.cases;
   state.recommendations = data.recommendations;
   state.reasons = data.reasons;
+  state.policyVersion = data.policy.version;
+}
+
+// The offered checks, plus any this draft already has that are no longer offered, so
+// nothing is dropped without someone unticking it.
+function draftChoices(draft, choices) {
+  return Object.fromEntries(Object.entries(choices).map(([outcome, offered]) => {
+    const rule = draft.rules.find((candidate) => candidate.outcome === outcome);
+    const saved = new Map(rule.when_any.map((item) => [choiceId(item), item]));
+    const ids = new Set(offered.map(choiceId));
+    const list = [
+      ...offered.map((choice) => ({ ...choice, ...saved.get(choiceId(choice)) })),
+      ...rule.when_any.filter((item) => !ids.has(choiceId(item))),
+    ];
+    // The rule shares these objects, so a new quote limit reaches what gets saved.
+    rule.when_any = list.filter((choice) => saved.has(choiceId(choice)));
+    return [outcome, list];
+  }));
+}
+
+function applyPolicies(data) {
+  state.policyData = data;
+  state.policyVersion = data.current_version;
+  state.policyForm = data.draft
+    ? structuredClone({ change_note: data.draft.change_note, rules: data.draft.rules })
+    : null;
+  state.policyChoices = state.policyForm ? draftChoices(state.policyForm, data.choices) : null;
+  if (!state.openPolicy) state.openPolicy = data.current_version;
 }
 
 /* Actions */
 
-function requireReviewer() {
-  const name = dom.reviewer.value.trim();
-  if (name) return name;
-  dom.reviewer.setAttribute('aria-invalid', 'true');
-  dom.reviewer.focus();
-  return null;
-}
-
 function toggleRow(id) {
   state.expandedId = state.expandedId === id ? null : id;
+  state.popupPlacement = null;
+
   state.error = null;
   render();
+}
+
+function positionReviewPopup() {
+  const popup = dom.page.querySelector('.review-popup');
+  const anchor = [...dom.page.querySelectorAll('[data-toggle]')]
+    .find((button) => button.dataset.toggle === state.expandedId);
+  if (!popup || !anchor) return;
+  if (state.popupPlacement?.id === state.expandedId) {
+    Object.assign(popup.style, state.popupPlacement.style);
+    return;
+  }
+  const rect = anchor.getBoundingClientRect();
+  const gap = 8;
+  const margin = 12;
+  const height = popup.offsetHeight;
+  const below = window.innerHeight - rect.bottom - gap - margin;
+  const above = rect.top - gap - margin;
+  const placeBelow = below >= height || below >= above;
+  popup.style.maxHeight = `${Math.max(120, placeBelow ? below : above)}px`;
+  popup.style.left = `${Math.max(margin, Math.min(rect.right - popup.offsetWidth, window.innerWidth - popup.offsetWidth - margin))}px`;
+  popup.style.top = `${placeBelow ? rect.bottom + gap : Math.max(margin, rect.top - gap - popup.offsetHeight)}px`;
+  state.popupPlacement = { id: state.expandedId, style: { left: popup.style.left, top: popup.style.top, maxHeight: popup.style.maxHeight } };
+}
+
+window.addEventListener('resize', () => { state.popupPlacement = null; positionReviewPopup(); });
+dom.page.addEventListener('scroll', () => { state.popupPlacement = null; positionReviewPopup(); });
+
+function closeReview() {
+  const id = state.expandedId;
+  state.expandedId = null;
+  state.error = null;
+  render();
+  [...dom.page.querySelectorAll('[data-toggle]')].find((button) => button.dataset.toggle === id)?.focus();
 }
 
 function setFilter(filter) {
@@ -397,27 +636,49 @@ function setFilter(filter) {
   render();
 }
 
+function updateReviewEditor() {
+  const popup = dom.page.querySelector('.review-popup');
+  if (!popup) return;
+  const focusId = document.activeElement?.id;
+  const focusedDecision = document.activeElement?.dataset.decision;
+  const scrollTop = popup.scrollTop;
+  popup.querySelector('.action').outerHTML = renderAction(findItem(state.expandedId));
+  if (focusId) document.getElementById(focusId)?.focus({ preventScroll: true });
+  else if (focusedDecision) popup.querySelector(`[data-decision="${focusedDecision}"]`)?.focus({ preventScroll: true });
+  popup.scrollTop = scrollTop;
+}
+
 function setDecision(code) {
-  draftFor(findItem(state.expandedId)).decision = code;
+  const item = findItem(state.expandedId);
+  const draft = draftFor(item);
+  draft.decision = code;
+  if (!reasonsFor(item, code).some((reason) => reason.code === draft.reason)) {
+    draft.reason = preselectedReason(item, code);
+  }
   state.error = null;
-  render();
+  updateReviewEditor();
 }
 
 function setReason(code) {
   draftFor(findItem(state.expandedId)).reason = code;
   state.error = null;
-  render();
+  updateReviewEditor();
+  document.getElementById('reason').focus({ preventScroll: true });
+}
+
+function setChanging(changing) {
+  draftFor(findItem(state.expandedId)).changing = changing;
+  state.error = null;
+  updateReviewEditor();
 }
 
 async function submitReview(item, decision, reason, note) {
   const id = item.case.case_id;
-  const reviewer = requireReviewer();
-  if (!reviewer) throw new Error('Enter your name in the sidebar first.');
   state.busy.add(id);
   render();
   try {
     const updated = await postJson('/api/reviews', {
-      case_id: id, reviewer, final_recommendation: decision, reason_code: reason, note,
+      case_id: id, reviewer: state.reviewer, final_recommendation: decision, reason_code: reason, note,
     });
     replaceItem(updated);
     state.drafts.delete(id);
@@ -427,20 +688,30 @@ async function submitReview(item, decision, reason, note) {
   }
 }
 
-async function approve(id) {
-  const item = findItem(id);
+async function save(item, decision, reason, note) {
   try {
-    await submitReview(item, 'routine_processing', 'resolved_after_review', '');
-    if (state.expandedId === id) state.expandedId = null;
+    await submitReview(item, decision, reason, note);
+    state.expandedId = null;
+    state.error = null;
     render();
-    showToast(`${id} sent to routine processing`, id);
+    const recommended = item.automated.recommendation;
+    const verb = { [recommended]: 'confirmed as' }[decision] ?? (recommended === 'human_review' ? 'moved to' : 'changed to');
+    showToast(`${item.case.case_id} ${verb} ${lowerFirst(outcomeName(decision))}`);
   } catch (error) {
+    state.error = error.message;
     render();
-    showToast(error.message);
+    if (!state.reviewer.trim()) document.getElementById('reviewer').focus();
   }
 }
 
-async function save() {
+// Confirming takes one click, and records the usual reason for agreeing.
+function confirmRecommendation() {
+  const item = findItem(state.expandedId);
+  const code = item.automated.recommendation;
+  save(item, code, preselectedReason(item, code), '');
+}
+
+function saveChange() {
   const item = findItem(state.expandedId);
   const draft = draftFor(item);
   if (!draft.decision) {
@@ -448,28 +719,7 @@ async function save() {
     render();
     return;
   }
-  try {
-    await submitReview(item, draft.decision, draft.reason, draft.note);
-    state.expandedId = null;
-    state.error = null;
-    render();
-    showToast(`${item.case.case_id} sent to ${lowerFirst(outcomeName(draft.decision))}`, item.case.case_id);
-  } catch (error) {
-    state.error = error.message;
-    render();
-  }
-}
-
-async function undo(id) {
-  hideToast();
-  try {
-    replaceItem(await postJson('/api/reviews/undo', { case_id: id, reviewer: dom.reviewer.value.trim() }));
-    state.drafts.delete(id);
-    render();
-    showToast(`${id} undone`);
-  } catch (error) {
-    showToast(error.message);
-  }
+  save(item, draft.decision, draft.reason, draft.note);
 }
 
 function importSummary({ added, updated, unchanged, needs_review_again: again }) {
@@ -497,46 +747,237 @@ async function importFile(file) {
   render();
 }
 
+function saveDraftNow() {
+  clearTimeout(draftTimer);
+  draftTimer = null;
+  draftSaves = draftSaves.then(async () => {
+    try {
+      state.policyData = await postJson('/api/policies/draft', state.policyForm);
+      state.policyError = null;
+    } catch (error) {
+      state.policyError = error.message;
+    }
+    refreshDraftStatus();
+  });
+  return draftSaves;
+}
+
+function scheduleDraftSave() {
+  clearTimeout(draftTimer);
+  draftTimer = setTimeout(saveDraftNow, DRAFT_SAVE_DELAY_MS);
+  if (state.policyConfirm) {
+    state.policyConfirm = null;
+    refreshDraftStatus();
+  }
+}
+
+// Waits until the server has everything on screen.
+const flushDraft = () => (draftTimer ? saveDraftNow() : draftSaves);
+
+async function loadPolicies() {
+  state.policyStatus = 'loading';
+  render();
+  try {
+    await flushDraft();
+    const response = await fetch('/api/policies');
+    if (!response.ok) throw new Error('Load failed');
+    applyPolicies(await response.json());
+    state.policyStatus = 'ready';
+  } catch {
+    state.policyStatus = 'failed';
+  }
+  render();
+}
+
+function goToPage(id) {
+  state.pageId = id;
+  renderNav();
+  if (id === 'policies') loadPolicies();
+  else if (id === 'measurement') measurementUI.load();
+  else if (id === 'validation') validationUI.load();
+  else render();
+}
+
+async function policyRequest(path) {
+  state.policyBusy = true;
+  state.policyError = null;
+  render();
+  try {
+    const data = await postJson(path, {});
+    applyPolicies(data);
+    return data;
+  } catch (error) {
+    state.policyError = error.message;
+    return null;
+  } finally {
+    state.policyBusy = false;
+    render();
+  }
+}
+
+const policyActions = {
+  reload: loadPolicies,
+  select: ({ version }) => { state.openPolicy = version; render(); },
+  edit: async () => {
+    if (state.policyData.draft || await policyRequest('/api/policies/draft/start')) state.policyEditing = true;
+    render();
+  },
+  back: async () => {
+    await flushDraft();
+    state.policyEditing = false;
+    state.policyConfirm = null;
+    render();
+  },
+  reviewDraft: async () => { await flushDraft(); if (!state.policyError) { state.pageId = 'validation'; renderNav(); validationUI.load(true); } },
+  askDiscard: () => { state.policyConfirm = 'discard'; refreshDraftStatus(); },
+  cancelConfirm: () => { state.policyConfirm = null; refreshDraftStatus(); },
+  discard: async () => {
+    clearTimeout(draftTimer);
+    draftTimer = null;
+    await draftSaves;
+    state.policyConfirm = null;
+    if (!await policyRequest('/api/policies/draft/discard')) return;
+    state.policyEditing = false;
+    render();
+    showToast('Draft discarded');
+  },
+};
+
+function toggleChoice(target) {
+  const { choice: id, ruleOutcome } = target.dataset;
+  const rule = state.policyForm.rules.find((candidate) => candidate.outcome === ruleOutcome);
+  const on = new Set(rule.when_any.map(choiceId));
+  if (target.checked) on.add(id);
+  else on.delete(id);
+  rule.when_any = state.policyChoices[ruleOutcome].filter((choice) => on.has(choiceId(choice)));
+  if (target.id === 'quote-check') document.getElementById('quote-limit').disabled = !target.checked;
+  scheduleDraftSave();
+}
+
+function setQuoteLimit(target) {
+  const quote = state.policyChoices.human_review.find(isQuote);
+  quote.value = target.value === '' ? null : Number(target.value);
+  scheduleDraftSave();
+}
+
+function hideRuleTooltip() {
+  const tooltip = document.getElementById('rule-tooltip');
+  if (tooltip?.matches(':popover-open')) tooltip.hidePopover();
+}
+
+function showRuleTooltip(trigger) {
+  const tooltip = document.getElementById('rule-tooltip');
+  if (!tooltip) return;
+  tooltip.textContent = trigger.dataset.rule;
+  if (!tooltip.matches(':popover-open')) tooltip.showPopover();
+  const rect = trigger.getBoundingClientRect();
+  tooltip.style.left = `${Math.max(12, Math.min(rect.left, window.innerWidth - tooltip.offsetWidth - 12))}px`;
+  tooltip.style.top = `${rect.bottom + 8 + tooltip.offsetHeight <= window.innerHeight - 12
+    ? rect.bottom + 8 : Math.max(12, rect.top - tooltip.offsetHeight - 8)}px`;
+}
+
+dom.page.addEventListener('pointerover', (event) => {
+  const trigger = event.target.closest('.rule-trigger');
+  if (trigger) showRuleTooltip(trigger);
+});
+dom.page.addEventListener('pointerout', (event) => {
+  if (!event.target.closest('.rule-trigger, .rule-tooltip')) return;
+  if (event.relatedTarget?.closest?.('.rule-trigger, .rule-tooltip')) return;
+  hideRuleTooltip();
+});
+dom.page.addEventListener('focusin', (event) => {
+  const trigger = event.target.closest('.rule-trigger');
+  if (trigger) showRuleTooltip(trigger);
+});
+dom.page.addEventListener('focusout', (event) => {
+  if (event.target.closest('.rule-trigger')) hideRuleTooltip();
+});
+document.addEventListener('keydown', (event) => { if (event.key === 'Escape') hideRuleTooltip(); });
+window.addEventListener('resize', hideRuleTooltip);
+dom.page.addEventListener('scroll', hideRuleTooltip);
+
+function closeReasonMenu(focus = false) {
+  const picker = dom.page.querySelector('.reason-picker');
+  if (!picker) return;
+  picker.querySelector('.reason-menu').hidden = true;
+  picker.querySelector('#reason').setAttribute('aria-expanded', 'false');
+  if (focus) picker.querySelector('#reason').focus({ preventScroll: true });
+}
+
+function toggleReasonMenu() {
+  const picker = dom.page.querySelector('.reason-picker');
+  const menu = picker.querySelector('.reason-menu');
+  if (!menu.hidden) { closeReasonMenu(true); return; }
+  menu.hidden = false;
+  picker.querySelector('#reason').setAttribute('aria-expanded', 'true');
+  (menu.querySelector('[aria-selected="true"]') ?? menu.querySelector('button')).focus({ preventScroll: true });
+}
+
+document.addEventListener('click', (event) => {
+  if (!event.target.closest('.reason-picker')) closeReasonMenu();
+});
+document.addEventListener('keydown', (event) => {
+  const picker = event.target.closest('.reason-picker');
+  if (!picker) return;
+  const menu = picker.querySelector('.reason-menu');
+  if (event.key === 'Escape' && !menu.hidden) {
+    event.preventDefault(); event.stopPropagation(); closeReasonMenu(true); return;
+  }
+  if (event.key === 'Tab') { closeReasonMenu(); return; }
+  if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+  event.preventDefault();
+  if (menu.hidden) { toggleReasonMenu(); return; }
+  const options = [...menu.querySelectorAll('button')];
+  const index = options.indexOf(document.activeElement);
+  const next = event.key === 'Home' ? 0 : event.key === 'End' ? options.length - 1
+    : (index + (event.key === 'ArrowDown' ? 1 : -1) + options.length) % options.length;
+  options[next].focus({ preventScroll: true });
+});
+
 /* Events */
 
 document.addEventListener('click', (event) => {
   const button = event.target.closest('button');
   if (button) {
-    const { page, filter, toggle, approve: approveId, decision, reason, undo: undoId } = button.dataset;
-    if (page) { state.pageId = page; render(); }
+    const { page, filter, toggle, decision, policyAction } = button.dataset;
+    if (policyAction) policyActions[policyAction](button.dataset);
+    else if (page) goToPage(page);
     else if (filter) setFilter(filter);
     else if (toggle) toggleRow(toggle);
-    else if (approveId) {
-      if (findItem(approveId).review) undo(approveId);
-      else approve(approveId);
-    }
+    else if ('reasonMenu' in button.dataset) toggleReasonMenu();
+    else if (button.dataset.reason) setReason(button.dataset.reason);
     else if (decision) setDecision(decision);
-    else if (reason) setReason(reason);
-    else if (undoId) undo(undoId);
-    else if ('save' in button.dataset) save();
+    else if ('closeReview' in button.dataset) closeReview();
+    else if ('confirm' in button.dataset) confirmRecommendation();
+    else if ('change' in button.dataset) setChanging(true);
+    else if ('cancelChange' in button.dataset) setChanging(false);
+    else if ('save' in button.dataset) saveChange();
     else if ('import' in button.dataset) document.getElementById('file').click();
     else if ('dismiss' in button.dataset) { state.banner = null; render(); }
     else if ('retry' in button.dataset) start();
     return;
   }
-  const row = event.target.closest('.row');
-  if (row && !String(getSelection())) toggleRow(row.dataset.row);
+
 });
 
 dom.page.addEventListener('change', (event) => {
+  if (event.target.dataset.choice) { toggleChoice(event.target); return; }
+  if (event.target.id === 'reason') { setReason(event.target.value); return; }
   if (event.target.id !== 'file') return;
   const [file] = event.target.files;
   if (file) importFile(file);
 });
 
 dom.page.addEventListener('input', (event) => {
+  if (event.target.id === 'quote-limit') { setQuoteLimit(event.target); return; }
+  if (event.target.id === 'policy-note') {
+    state.policyForm.change_note = event.target.value;
+    scheduleDraftSave();
+    return;
+  }
+  if (event.target.id === 'reviewer') { state.reviewer = event.target.value; return; }
   if (event.target.id !== 'note') return;
   draftFor(findItem(state.expandedId)).note = event.target.value;
-});
-
-dom.reviewer.addEventListener('input', () => {
-  dom.reviewer.removeAttribute('aria-invalid');
-  storeReviewer(dom.reviewer.value.trim());
 });
 
 /* Start */
@@ -555,5 +996,13 @@ async function start() {
   render();
 }
 
-dom.reviewer.value = readStoredReviewer();
+const measurementUI = createMeasurementUI({ root: dom.page, active: () => state.pageId === 'measurement', request: postJson });
+
+const validationUI = createValidationUI({
+  root: dom.page, active: () => state.pageId === 'validation', request: postJson, flush: flushDraft,
+  onActivated: (data) => { applyPolicies(data); state.policyEditing = false; showToast(`${data.current_version} activated. Affected open claims are ready for review.`); },
+  onClaims: () => { state.pageId = 'claims'; state.filter = 'recheck'; start(); },
+  onPolicies: () => { state.policyEditing = true; goToPage('policies'); },
+});
+
 start();

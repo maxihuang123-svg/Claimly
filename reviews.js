@@ -4,14 +4,16 @@ import { RECOMMENDATIONS } from './engine.js';
 
 export const SCHEMA_VERSION = 1;
 
-// Why a reviewer changed the outcome. These codes split system faults from normal
-// handling: resolved_after_review means the escalation was right, so it should not
-// count against the automation.
+// Why a reviewer confirmed or changed the recommendation. `kind` limits a reason to one
+// of those, and `preselected` marks the usual answer. These codes split system faults
+// from normal handling: resolved_after_review means the escalation was right, so it
+// should not count against the automation.
 export const REASONS = [
-  { code: 'resolved_after_review', label: 'Escalation was right, now resolved', only_for: 'human_review' },
-  { code: 'input_data_wrong', label: 'Input data is wrong' },
-  { code: 'rule_misapplied', label: 'Rule was misapplied' },
-  { code: 'policy_gap', label: 'Policy gives the wrong result here' },
+  { code: 'evidence_supports', label: 'Evidence supports the recommendation', kind: 'confirm', preselected: true },
+  { code: 'resolved_after_review', label: 'Escalation was right, now resolved', kind: 'change', only_for: 'human_review', preselected: true },
+  { code: 'input_data_wrong', label: 'Input data is wrong', kind: 'change' },
+  { code: 'rule_misapplied', label: 'Rule was misapplied', kind: 'change' },
+  { code: 'policy_gap', label: 'Policy gives the wrong result here', kind: 'change' },
   { code: 'other', label: 'Other', note_required: true },
 ];
 
@@ -23,6 +25,7 @@ export class ReviewLog {
   constructor(path) {
     this.path = path;
     this.byCase = new Map();
+    this.eventsByCase = new Map();
     if (!existsSync(path)) return;
     readFileSync(path, 'utf8').split('\n').forEach((line, index) => {
       if (!line.trim()) return;
@@ -35,6 +38,7 @@ export class ReviewLog {
   }
 
   #apply(event) {
+    this.eventsByCase.set(event.case_id, [...this.history(event.case_id), event]);
     const history = this.byCase.get(event.case_id) ?? [];
     if (event.event === 'review') history.push(event);
     if (event.event === 'retraction') {
@@ -54,6 +58,11 @@ export class ReviewLog {
     return this.byCase.get(caseId)?.at(-1) ?? null;
   }
 
+  // Every review and undo of a case, oldest first.
+  history(caseId) {
+    return this.eventsByCase.get(caseId) ?? [];
+  }
+
   record(item, input) {
     const reviewer = String(input.reviewer ?? '').trim();
     const decision = input.final_recommendation;
@@ -61,20 +70,19 @@ export class ReviewLog {
     const automated = item.automated;
     const changed = decision !== automated.recommendation;
 
-    if (!reviewer) throw new ReviewError('Enter your name before saving.');
     if (!RECOMMENDATIONS.includes(decision)) throw new ReviewError('Choose a next step.');
     if (decision === 'human_review' && automated.recommendation === 'human_review') {
       throw new ReviewError('This case is already in human review. Choose where it goes next.');
     }
+    if (!reviewer) throw new ReviewError('Add the reviewer name.');
 
     const reason = REASONS.find((option) => option.code === input.reason_code);
-    if (changed) {
-      if (!reason) throw new ReviewError('Choose a reason for the change.');
-      if (reason.only_for && reason.only_for !== automated.recommendation) {
-        throw new ReviewError('That reason does not apply to this case.');
-      }
-      if (reason.note_required && !note) throw new ReviewError('Add a note to explain "Other".');
+    if (!reason) throw new ReviewError('Choose a reason.');
+    const wrongKind = reason.kind && reason.kind !== (changed ? 'change' : 'confirm');
+    if (wrongKind || (reason.only_for && reason.only_for !== automated.recommendation)) {
+      throw new ReviewError('That reason does not apply to this decision.');
     }
+    if (reason.note_required && !note) throw new ReviewError('Add a note to explain "Other".');
 
     return this.#write({
       schema_version: SCHEMA_VERSION,
@@ -94,7 +102,7 @@ export class ReviewLog {
       // confirmed: the decision stands. resolved: a correct escalation was settled by a
       // person. changed: the automation got it wrong.
       outcome: !changed ? 'confirmed' : reason.code === 'resolved_after_review' ? 'resolved' : 'changed',
-      reason_code: changed ? reason.code : null,
+      reason_code: reason.code,
       note: note || null,
       supersedes: this.current(item.case.case_id)?.review_id ?? null,
     });

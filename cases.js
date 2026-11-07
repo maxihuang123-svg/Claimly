@@ -10,7 +10,7 @@ export const REQUIRED_COLUMNS = [
 export class CaseFileError extends Error {}
 
 // Validates a whole file before anything is used, so a bad import changes nothing.
-export function parseCaseFile(text) {
+export function parseCaseFile(text, policy) {
   let rows;
   try {
     rows = parseCsv(text);
@@ -29,7 +29,7 @@ export function parseCaseFile(text) {
     if (seen.has(id)) throw new CaseFileError(`Case ${id} appears more than once.`);
     seen.add(id);
     const record = normalizeCase(row);
-    return { case: record, automated: evaluate(record) };
+    return { case: record, automated: evaluate(record, policy) };
   });
 }
 

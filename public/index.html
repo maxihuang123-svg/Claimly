@@ -10,18 +10,14 @@
 <body>
   <!--
     Claims review.
-    THESIS: One table. A green check clears a row; clicking a row opens its trace in place.
+    THESIS: One table. Clicking a row opens recommendation, reason, evidence and action in place. The full trace waits behind Show details.
     SCENE: A claims handler at a desktop in daylight, working through rows with a mouse.
-    COLOR: Neutrals. Color marks the three outcomes and the approve check, nothing else.
+    COLOR: Neutrals. Color marks the three outcomes, nothing else.
     TYPE: System sans throughout. Tabular numerals. Mono only for case IDs.
     SHELL: The sidebar lists pages. Add a page by adding one entry to PAGES in app.js.
   -->
   <aside class="sidebar">
     <nav aria-label="Pages"><ul class="nav" id="nav"></ul></nav>
-    <label class="reviewer">
-      <span>Reviewer</span>
-      <input id="reviewer" type="text" autocomplete="name" placeholder="Your name" spellcheck="false">
-    </label>
   </aside>
   <main class="page" id="page"></main>
   <div class="toast" id="toast" role="status" hidden></div>
