@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { appendFileSync, existsSync, readFileSync } from 'node:fs';
 import { RECOMMENDATIONS } from './engine.js';
+import { asLog } from './storage.js';
 
 export const SCHEMA_VERSION = 1;
 
@@ -22,17 +22,17 @@ export class ReviewError extends Error {}
 // The log is append-only. The current review of a case is found by replaying it, so
 // edits and undos never erase what a reviewer previously recorded.
 export class ReviewLog {
-  constructor(path) {
-    this.path = path;
+  constructor(target) {
+    this.log = asLog(target);
+    this.path = this.log.path;
     this.byCase = new Map();
     this.eventsByCase = new Map();
-    if (!existsSync(path)) return;
-    readFileSync(path, 'utf8').split('\n').forEach((line, index) => {
+    this.log.read().split('\n').forEach((line, index) => {
       if (!line.trim()) return;
       try {
         this.#apply(JSON.parse(line));
       } catch {
-        console.warn(`Skipping unreadable line ${index + 1} in ${path}`);
+        console.warn(`Skipping unreadable line ${index + 1} in ${this.path}`);
       }
     });
   }
@@ -49,7 +49,7 @@ export class ReviewLog {
   }
 
   #write(event) {
-    appendFileSync(this.path, `${JSON.stringify(event)}\n`);
+    this.log.append(`${JSON.stringify(event)}\n`);
     this.#apply(event);
     return event;
   }

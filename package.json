@@ -4,7 +4,15 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "agent": "node scripts/setup-agent.js",
+    "dev:worker": "wrangler dev",
+    "deploy": "wrangler deploy"
   },
-  "engines": { "node": ">=20" }
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "wrangler": "^4.158.0"
+  }
 }

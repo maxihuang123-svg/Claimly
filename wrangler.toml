@@ -1,0 +1,27 @@
+# Cloudflare deploy: `npm run deploy`. See worker/index.js.
+name = "claimly"
+main = "worker/index.js"
+compatibility_date = "2026-10-01"
+compatibility_flags = ["nodejs_compat"]
+
+[build]
+command = "node scripts/build-worker.js"
+
+# public/ is served as static files. The Worker runs first so the access code covers them too.
+[assets]
+directory = "./public"
+binding = "ASSETS"
+run_worker_first = true
+
+[[durable_objects.bindings]]
+name = "CLAIMS"
+class_name = "Claims"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Claims"]
+
+# Not secret. ELEVENLABS_API_KEY and ACCESS_CODE are secrets: `npx wrangler secret put <NAME>`.
+# For `npm run dev:worker`, put them in .dev.vars (git-ignored), as KEY=value lines.
+[vars]
+ELEVENLABS_AGENT_ID = "agent_7401m6v4zp3yftpt1vker4ynx4sh"
