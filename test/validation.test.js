@@ -10,7 +10,7 @@ import { parseCaseFile } from '../cases.js';
 function fixture() {
   const dir = mkdtempSync(join(tmpdir(), 'impact-'));
   const store = new ValidationStore(join(dir, 'validation.jsonl'), 'engine-test');
-  const items = parseCaseFile(readFileSync(new URL('../data/cases.csv', import.meta.url), 'utf8'), POLICY_V1);
+  const items = parseCaseFile(readFileSync(new URL('./practice_cases.csv', import.meta.url), 'utf8'), POLICY_V1);
   const candidate = structuredClone({ ...POLICY_V1, version: 'draft', change_note: 'Test change' });
   return { store, items, candidate };
 }
@@ -64,6 +64,19 @@ test('closed cases participate in simulations without being flagged for recheck'
   assert.equal(run.claims[0].changed, true);
   assert.equal(run.claims[0].needs_recheck, false);
   assert.deepEqual(f.items, original);
+});
+
+test('only a changed next step creates a recheck, not a changed reason', () => {
+  const f = fixture();
+  f.items[0].case.quote_eur = 1800;
+  f.items[1].case.quote_eur = 1300;
+  f.candidate.rules[0].when_any.find((c) => c.field === 'quote_eur').value = 1200;
+  const [sameStep, newStep] = f.store.run(POLICY_V1, f.candidate, f.items).claims;
+  assert.equal(sameStep.changed, false);
+  assert.equal(sameStep.reason_changed, true);
+  assert.equal(sameStep.needs_recheck, false);
+  assert.equal(newStep.changed, true);
+  assert.equal(newStep.needs_recheck, true);
 });
 
 test('rechecks compare the selected policies rather than a recorded decision', () => {

@@ -55,7 +55,7 @@ export function createMeasurementUI({ root, active, request }) {
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || 'Could not load measurement data. Try Refresh data.');
       if (id === requestId) { data = payload; baseline = payload.baseline; candidate = payload.candidate; }
-    } catch (e) { if (id === requestId) error = e.message; }
+    } catch (e) { if (id === requestId) { error = e.message; baseline = data?.baseline ?? null; candidate = data?.candidate ?? null; } }
     finally { if (id === requestId) { busy = false; render(); } }
   }
   root.addEventListener('change', e => {

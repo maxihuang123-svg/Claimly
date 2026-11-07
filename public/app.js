@@ -90,12 +90,16 @@ const findItem = (id) => state.items.find((item) => item.case.case_id === id);
 
 // The review queue is what the automation sent to human review. Everything else stays
 // one filter away, so any recommendation can be opened and checked.
-const reviewItems = () => state.items.filter((item) => item.automated.recommendation === 'human_review');
-const routedItems = () => state.items.filter((item) => item.automated.recommendation !== 'human_review');
+// Closed claims are history, not work, so they sit in their own filter.
+const isClosed = (item) => item.case.case_status === 'closed';
+const reviewItems = () => state.items.filter((item) => !isClosed(item) && item.automated.recommendation === 'human_review');
+const routedItems = () => state.items.filter((item) => !isClosed(item) && item.automated.recommendation !== 'human_review');
+const closedItems = () => state.items.filter(isClosed);
 
 function visibleItems() {
   if (state.filter === 'recheck') return state.items.filter((item) => item.needs_recheck);
   if (state.filter === 'routed') return routedItems();
+  if (state.filter === 'closed') return closedItems();
   const items = reviewItems();
   if (state.filter === 'todo') return items.filter((item) => !item.review);
   if (state.filter === 'done') return items.filter((item) => item.review);
@@ -146,7 +150,7 @@ function renderHead() {
   const items = reviewItems();
   const reviewed = items.filter((item) => item.review).length;
   const changed = items.filter((item) => item.review?.outcome === 'changed').length;
-  const routed = state.items.length - items.length;
+  const routed = routedItems().length;
   const progress = [
     items.length ? `${reviewed} of ${items.length} reviewed${changed ? `, ${changed} changed` : ''}` : '',
     routed ? `${plural(routed, 'other case')} routed automatically` : '',
@@ -171,6 +175,7 @@ function renderFilters() {
     ['todo', 'To review', items.length - reviewed],
     ['done', 'Reviewed', reviewed],
     ['routed', 'Routed automatically', routedItems().length],
+    ...(closedItems().length ? [['closed', 'Closed', closedItems().length]] : []),
   ];
   return `<div class="filters" role="group" aria-label="Filter claims">${filters.map(([key, label, count]) => (
     `<button type="button" data-filter="${key}" aria-pressed="${state.filter === key}">${label} ${count}</button>`
@@ -313,7 +318,7 @@ function renderTable() {
     return `<div class="state"><strong>No claims yet</strong>Import a CSV to start reviewing.<br>
       <button type="button" class="button" data-import>Import CSV</button></div>`;
   }
-  if (!['routed', 'recheck'].includes(state.filter) && !reviewItems().length) {
+  if (!['routed', 'recheck', 'closed'].includes(state.filter) && !reviewItems().length) {
     return '<div class="state"><strong>No cases need human review</strong>Every imported case was routed automatically.</div>';
   }
   if (!items.length) {
@@ -322,6 +327,7 @@ function renderTable() {
       todo: 'Everything has been reviewed.',
       done: 'Nothing reviewed yet.',
       routed: 'Every imported case is in human review.',
+      closed: 'No closed claims.',
     }[state.filter];
     return `<div class="state"><strong>${message}</strong></div>`;
   }
@@ -1000,7 +1006,7 @@ const measurementUI = createMeasurementUI({ root: dom.page, active: () => state.
 
 const validationUI = createValidationUI({
   root: dom.page, active: () => state.pageId === 'validation', request: postJson, flush: flushDraft,
-  onActivated: (data) => { applyPolicies(data); state.policyEditing = false; showToast(`${data.current_version} activated. Affected open claims are ready for review.`); },
+  onActivated: (data) => { state.openPolicy = data.current_version; applyPolicies(data); state.policyEditing = false; showToast(`${data.current_version} activated. Affected open claims are ready for review.`); },
   onClaims: () => { state.pageId = 'claims'; state.filter = 'recheck'; start(); },
   onPolicies: () => { state.policyEditing = true; goToPage('policies'); },
 });

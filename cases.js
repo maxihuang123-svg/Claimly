@@ -10,7 +10,9 @@ export const REQUIRED_COLUMNS = [
 export class CaseFileError extends Error {}
 
 // Validates a whole file before anything is used, so a bad import changes nothing.
-export function parseCaseFile(text, policy) {
+// A closed claim was decided before it arrived here, so it keeps its historical decision
+// under closedPolicy, even when the file is imported after a later policy took effect.
+export function parseCaseFile(text, policy, closedPolicy = policy) {
   let rows;
   try {
     rows = parseCsv(text);
@@ -29,7 +31,7 @@ export function parseCaseFile(text, policy) {
     if (seen.has(id)) throw new CaseFileError(`Case ${id} appears more than once.`);
     seen.add(id);
     const record = normalizeCase(row);
-    return { case: record, automated: evaluate(record, policy) };
+    return { case: record, automated: evaluate(record, record.case_status === 'closed' ? closedPolicy : policy) };
   });
 }
 

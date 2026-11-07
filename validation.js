@@ -116,7 +116,9 @@ export class ValidationStore {
       const before = evaluate(item.case, baseline), after = evaluate(item.case, candidate);
       return { ...item, before, after, changed: before.recommendation !== after.recommendation,
         reason_changed: signature(before) !== signature(after),
-        needs_recheck: item.case.case_status === 'open' && signature(before) !== signature(after) };
+        // The change notice asks for open claims whose next step changes. A new reason alone
+        // stays visible through reason_changed, but creates no work.
+        needs_recheck: item.case.case_status === 'open' && before.recommendation !== after.recommendation };
     });
     return this.write({ type: 'run', mode: 'impact', reviewer: String(reviewer ?? '').trim() || null,
       baseline, candidate, engine_version: this.engineVersion,

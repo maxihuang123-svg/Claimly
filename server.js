@@ -36,6 +36,10 @@ const validationItems = () => [...items.values()].map(withReview);
 function selectedPolicy(version) {
   const policy = version === 'draft' ? policies.draft && { ...policies.draft, version: 'draft' } : policies.find(version);
   if (!policy) throw new PolicyError('That policy is no longer available. Reload the page.');
+  // An unfinished draft cannot be evaluated, for example while its quote limit is blank.
+  if (version === 'draft' && validatePolicy({ ...policy, change_note: 'x' }).length) {
+    throw new PolicyError('This draft has unfinished rules. Finish them in Policies, then test it.');
+  }
   return policy;
 }
 
@@ -62,7 +66,7 @@ function loadCases() {
     files.push(...names.map((name) => [join(importsDir, name), policyForImport(name)]));
   }
   for (const [file, policy] of files) {
-    for (const item of parseCaseFile(readFileSync(file, 'utf8'), policy)) {
+    for (const item of parseCaseFile(readFileSync(file, 'utf8'), policy, policies.original)) {
       const existing = items.get(item.case.case_id);
       if (!existing || !sameCase(existing, item)) items.set(item.case.case_id, item);
     }
@@ -110,7 +114,7 @@ const policiesPayload = () => ({
 
 function importCases(text) {
   const policy = policies.current;
-  const incoming = parseCaseFile(text, policy);
+  const incoming = parseCaseFile(text, policy, policies.original);
   const summary = { added: 0, updated: 0, unchanged: 0, needs_review_again: 0 };
   const changes = [];
 

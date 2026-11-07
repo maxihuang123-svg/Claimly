@@ -29,3 +29,15 @@ test('a review lapses when the automated decision changes', () => {
   assert.equal(reviewStillApplies(review, after.automated), false);
   assert.equal(reviewStillApplies(review, sameDecision.automated), true);
 });
+
+test('a closed claim keeps its historical decision when imported under a later policy', () => {
+  const later = structuredClone(POLICY_V1);
+  later.version = 'v2';
+  later.rules[0].when_any.find((check) => check.field === 'quote_eur').value = 1200;
+  const closed = row('A', '1350').replace(',open,', ',closed,');
+  const [kept, live] = parseWithPolicy(`${header}\n${closed}\n${row('B', '1350')}\n`, later, POLICY_V1);
+  assert.equal(kept.automated.policy_version, 'v1');
+  assert.equal(kept.automated.recommendation, 'routine_processing');
+  assert.equal(live.automated.policy_version, 'v2');
+  assert.equal(live.automated.recommendation, 'human_review');
+});

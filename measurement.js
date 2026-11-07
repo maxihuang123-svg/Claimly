@@ -34,7 +34,8 @@ export class OutcomeStore {
 export function measurementPayload(items, baseline, candidate, validation, outcomes) {
   const labelled = validation.labelledResults(baseline, candidate);
   const changed = labelled.examples.filter(r => r.before.actual.recommendation !== r.after.actual.recommendation || r.before.expected !== r.after.expected);
-  const groups = [['All examples', labelled.examples], ['Affected by change', changed], ['Unaffected examples', labelled.examples.filter(r => !changed.includes(r))]];
+  const groups = [['All examples', labelled.examples], ['Affected by change', changed], ['Unaffected examples', labelled.examples.filter(r => !changed.includes(r))],
+    ['Examples with blank fields', labelled.examples.filter(r => Object.values(r.case).some(v => v === null))]];
   const reviews = items.filter(i => i.review);
   const latest = new Map();
   for (const event of outcomes.events) latest.set(event.case_id, event);

@@ -102,7 +102,7 @@ export function createValidationUI({ root, active, request, flush, onActivated, 
       state.labelsDirty = false;
       state.baseline ??= data.current_version;
       state.candidate ??= data.draft ? 'draft' : data.current_version;
-    } catch (error) { if (seq === generation) state.error = error.message; }
+    } catch (error) { if (seq === generation) { state.error = error.message; state.data = null; } }
     finally { if (seq === generation) { state.busy = false; render(); } }
   }
   async function action(kind, button) {
