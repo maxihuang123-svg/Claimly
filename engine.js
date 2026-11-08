@@ -87,7 +87,8 @@ const parseQuote = (raw) => {
 
 export function normalizeCase(row) {
   const record = { case_id: row.case_id.trim(), claim_summary: (row.claim_summary ?? '').trim() };
-  for (const field of fieldsOfType('text')) record[field] = (row[field] ?? '').trim() || null;
+  // Values are codes such as motor_own_damage, so "Motor_Own_Damage" means the same.
+  for (const field of fieldsOfType('text')) record[field] = (row[field] ?? '').trim().toLowerCase() || null;
   for (const field of fieldsOfType('boolean')) record[field] = parseBoolean(row[field]);
   record.quote_eur = parseQuote(row.quote_eur);
   return record;

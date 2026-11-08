@@ -63,3 +63,10 @@ test('the command writes the results CSV in the required format', () => {
   assert.match(lines[0], /^T-1,routine_processing,human_review,True,v1\.rule3,v2\.rule1,/);
   assert.match(lines[1], /^T-2,routine_processing,routine_processing,False,v1\.rule3,v1\.rule3,/);
 });
+
+test('text codes are read regardless of capitals', () => {
+  const [row] = results({ case_status: 'Open', claim_type: 'Motor_Own_Damage', repair_type: 'STANDARD' });
+  assert.deepEqual([row.recommendation_v1, row.recommendation_v2], ['routine_processing', 'routine_processing']);
+  const [closed] = results({ case_status: 'CLOSED', quote_eur: '1300' });
+  assert.equal(closed.needs_recheck, false);
+});
