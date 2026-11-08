@@ -33,6 +33,13 @@ closed claims and blank fields.
 
 ## The app
 
+**Live:** https://claimly.maxi-huang1234.workers.dev, behind an access code. Judges receive their access link with
+our submission. It logs in with one click and opens a separate copy of the app for the jury, with the practice
+claims, three voice demo claims and policy v2 already activated, so nothing a judge changes affects anyone else.
+Click **Start tutorial** in the sidebar for a one-minute walkthrough.
+
+To run it locally:
+
 ```sh
 npm start                      # http://localhost:3000, data in data/
 npm start -- test/practice_cases.csv   # start with the practice cases loaded
