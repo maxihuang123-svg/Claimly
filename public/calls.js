@@ -8,16 +8,13 @@ import { showIncomingCall } from './phone.js';
 
 const CLIENT_URL = 'https://esm.sh/@elevenlabs/client@1.35.0'; // loaded only when a browser call starts
 const CALLER = 'Claimly Claims'; // the name on the claimant's call screen
-const POLL_MS = 4000;
+const POLL_MS = 2000;
 const FINAL = ['done', 'failed'];
 
 const ANSWER_LABELS = {
-  claimant_name: 'Name given',
   repair_type: 'Repair type',
   repair_description: 'Repair, in their words',
   claimant_reached: 'Reached claimant',
-  will_send_documents: 'Will send what is missing',
-  documents_expected_by: 'Expected by',
   callback_requested: 'Wants a call back',
   new_information: 'New information',
   claimant_questions: 'Open questions',
@@ -200,6 +197,19 @@ async function connect(session, client, screen) {
       VoiceConversation.startSession({
         signedUrl: started.signed_url,
         dynamicVariables: started.dynamic_variables,
+        // The agent calls this as soon as the answer is clear, so the claim is updated during the call.
+        clientTools: {
+          record_repair_type: async ({ repair_type: repairType }) => {
+            try {
+              putContact((await api('/api/calls/answer', { id: session.contactId, repair_type: repairType })).contact);
+              refresh();
+              context.onClaimsChanged?.();
+              return 'Saved to the claim.';
+            } catch (error) {
+              return `Not saved: ${error.message}`;
+            }
+          },
+        },
         onConnect: ({ conversationId }) => {
           report(session.contactId, { conversation_id: conversationId });
           screen.connected();
@@ -291,7 +301,7 @@ function renderApplied(applied, source) {
   const changes = Object.entries(applied.changes)
     .map(([field, value]) => `${FIELD_NAMES[field] ?? field}: ${value === true ? 'Received' : VALUE_LABELS[value] ?? value}`).join(', ');
   return `<div class="call-applied">
-    <p><strong>Claim updated from this ${source}.</strong> ${escapeHtml(changes)}.</p>
+    <p><strong>Claim updated from this ${source}${applied.during === 'call' ? ', while it was going on' : ''}.</strong> ${escapeHtml(changes)}.</p>
     <p>Rules re-run under policy ${escapeHtml(applied.after.policy_version)}:
       ${escapeHtml(OUTCOME_NAMES[applied.before.recommendation])} → <strong>${escapeHtml(OUTCOME_NAMES[applied.after.recommendation])}</strong></p>
   </div>`;

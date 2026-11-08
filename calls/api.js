@@ -4,14 +4,16 @@
 //   GET  /api/calls                  every contact, for the page
 //   POST /api/calls                  { case_id } -> signed URL for a browser call
 //   POST /api/calls/connected        { id, conversation_id?, error? }  the browser reports its session
+//   POST /api/calls/answer           { id, repair_type }  the agent's answer during the call (its client tool);
+//                                    a clear answer to a blank field updates the claim at once (UPDATES)
 //   GET  /api/calls/result?id=...    fetches the call's analysis from ElevenLabs once, then keeps it;
-//                                    a clear answer to a blank field then updates the claim (UPDATES)
+//                                    if nothing was applied during the call, a clear answer there updates the claim
 //
 // The ElevenLabs key stays on the server. What the agent asks for is worked out here from the case,
 // never taken from the browser.
 
 import { readText, TooLarge } from '../body.js';
-import { canCall, joinList, missingItems } from '../public/missing.js';
+import { canCall, joinList, missingFields, missingItems } from '../public/missing.js';
 
 const EL = 'https://api.elevenlabs.io/v1';
 const FINAL = ['done', 'failed'];
@@ -25,6 +27,14 @@ const outcome = (automated) => ({
   recommendation: automated.recommendation, policy_version: automated.policy_version, rule_id: automated.rule_id,
 });
 const MAX_JSON_BYTES = 64 * 1024;
+const ANSWER_WINDOW_MS = 15 * 60_000; // answers are taken while a call can still be going on
+
+// The end of the agent's first message, so the call opens with what is missing.
+function openingQuestion(item) {
+  const fields = missingFields(item);
+  if (fields.length === 1 && fields[0] === 'repair_type') return "One quick question: what's being repaired, and is the car electric?";
+  return `We still need ${joinList(missingItems(item))}. Can you help with that?`;
+}
 
 class CallError extends Error {
   constructor(status, message) {
@@ -80,7 +90,7 @@ export function createCallApi({ env, findItem, contacts, updateCase = null, fetc
       policy_version: item.automated.policy_version,
       rule_id: item.automated.rule_id,
     });
-    const variables = { case_id: item.case.case_id, missing_items: joinList(missing) };
+    const variables = { case_id: item.case.case_id, missing_items: joinList(missing), question: openingQuestion(item) };
     return json({ contact, signed_url: signedUrl, dynamic_variables: variables }, 201);
   }
 
@@ -97,16 +107,31 @@ export function createCallApi({ env, findItem, contacts, updateCase = null, fetc
     return json({ contact: Object.keys(patch).length ? await contacts.update(contact.id, patch) : contact });
   }
 
-  function applyAnswers(contact, result) {
-    if (!updateCase || contact.applied || result.status !== 'done') return null;
+  // answers: { field: value }. Only a clear value for a field that is still blank changes the claim.
+  function applyAnswers(contact, answers, during) {
+    if (!updateCase || contact.applied) return null;
     const item = findItem(contact.case_id);
     if (!item || item.case.case_status !== 'open') return null;
     const changes = Object.fromEntries(Object.entries(UPDATES)
-      .filter(([field, clear]) => item.case[field] === null && clear.includes(result.data[field]?.value))
-      .map(([field]) => [field, result.data[field].value]));
+      .filter(([field, clear]) => item.case[field] === null && clear.includes(answers[field]))
+      .map(([field]) => [field, answers[field]]));
     if (!Object.keys(changes).length) return null;
     const after = updateCase(item.case.case_id, changes);
-    return { at: new Date().toISOString(), changes, before: outcome(item.automated), after: outcome(after) };
+    return { at: new Date().toISOString(), during, changes, before: outcome(item.automated), after: outcome(after) };
+  }
+
+  // The agent's client tool, relayed by the claimant's browser while the call is going on.
+  async function answer(request) {
+    const body = await readJson(request);
+    const contact = await contacts.get(String(body.id ?? ''));
+    if (!contact) throw new CallError(404, 'Unknown call.');
+    if (contact.applied) return json({ contact });
+    if (FINAL.includes(contact.result?.status) || Date.now() - Date.parse(contact.created_at) > ANSWER_WINDOW_MS) {
+      throw new CallError(400, 'This call is over.');
+    }
+    const applied = applyAnswers(contact, { repair_type: body.repair_type }, 'call');
+    if (!applied) throw new CallError(400, 'That answer does not change the claim.');
+    return json({ contact: await contacts.update(contact.id, { applied }) });
   }
 
   // Claimant statements, kept apart from claim facts. Once ElevenLabs has finished the analysis the result
@@ -130,7 +155,9 @@ export function createCallApi({ env, findItem, contacts, updateCase = null, fetc
         .map((turn) => ({ role: turn.role, message: turn.message })),
     };
     if (contact.result?.status === update.status && !FINAL.includes(update.status)) return json({ contact });
-    const applied = applyAnswers(contact, update);
+    const applied = update.status === 'done'
+      ? applyAnswers(contact, Object.fromEntries(Object.entries(update.data).map(([field, answer]) => [field, answer.value])), 'analysis')
+      : null;
     return json({ contact: await contacts.update(contact.id, applied ? { result: update, applied } : { result: update }) });
   }
 
@@ -143,6 +170,7 @@ export function createCallApi({ env, findItem, contacts, updateCase = null, fetc
         case 'GET /api/calls': return json({ contacts: await contacts.all() });
         case 'POST /api/calls': return await start(request);
         case 'POST /api/calls/connected': return await connected(request);
+        case 'POST /api/calls/answer': return await answer(request);
         case 'GET /api/calls/result': return await result(url);
         default: return json({ error: 'Not found.' }, 404);
       }

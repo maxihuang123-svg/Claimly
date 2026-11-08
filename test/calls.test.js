@@ -95,7 +95,9 @@ test('the server, not the browser, decides what the agent is told', async () => 
   const response = await call('POST', '/api/calls', { ...startCall, missing_items: 'your bank details' });
   assert.equal(response.status, 201);
   assert.equal(response.body.signed_url, 'wss://signed');
-  assert.deepEqual(response.body.dynamic_variables, { case_id: 'T-1', missing_items: 'the incident report' });
+  assert.deepEqual(response.body.dynamic_variables, {
+    case_id: 'T-1', missing_items: 'the incident report', question: 'We still need the incident report. Can you help with that?',
+  });
   assert.deepEqual(contacts.get(response.body.contact.id).missing_items, ['the incident report']);
 });
 
