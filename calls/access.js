@@ -1,6 +1,6 @@
 import { Buffer } from 'node:buffer';
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { readText } from '../body.js';
+import { readText } from '../src/body.js';
 
 // A shared access code for when the app is reachable from outside (a tunnel or a deploy).
 // Off unless ACCESS_CODE is set. Entering the code once sets a cookie; everything else needs it,

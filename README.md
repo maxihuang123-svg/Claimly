@@ -4,13 +4,33 @@ Trustworthy motor claims triage: every claim gets an explainable next step under
 decides wherever it matters, and when the rules change Claimly shows exactly which open claims need another look.
 Built for the Taktile case at thinc! Munich 2026.
 
+## Business case
+
+**[Read the Claimly business case →](hackathon-claimly-business-case.html)**
+
+Our product story, business rationale and hackathon presentation in one HTML document. Download the file and open it in a browser to view the presentation.
+
+## Repository guide
+
+| Location | Contents |
+| --- | --- |
+| [`hackathon-claimly-business-case.html`](hackathon-claimly-business-case.html) | Business case and presentation |
+| [`src/`](src/) | Application server, rules engine, policy logic and batch CLI |
+| [`public/`](public/) | Browser interface and static assets |
+| [`calls/`](calls/) | Voice and email integrations |
+| [`worker/`](worker/) | Cloudflare Worker entry point |
+| [`scripts/`](scripts/) | Build and agent setup tools |
+| [`test/`](test/) | Automated tests and scoring fixtures |
+| [`demo/`](demo/) | Demo claim datasets |
+| [`docs/`](docs/) | Supporting documentation |
+
 ## Batch path (for scoring)
 
 Needs Node 22 or later. No install step: the app has no runtime dependencies.
 
 ```sh
 npm run batch -- claims.csv results.csv
-# or: node batch.js claims.csv results.csv
+# or: node src/batch.js claims.csv results.csv
 ```
 
 On the website, use **Import CSV → batch results** on Claims review or All claims to upload a CSV and download `<filename>-results.csv`. This uses the same v1/v2 batch converter without adding claims to the review queue. The file limit is 5 MB.
@@ -18,8 +38,8 @@ On the website, use **Import CSV → batch results** on Claims review or All cla
 `claims.csv` is in the provided case format. `results.csv` gets the columns `case_id, recommendation_v1,
 recommendation_v2, needs_recheck, rule_v1, rule_v2, explanation`.
 
-- Every claim is evaluated under policy v1 and v2 (both defined in [`policies.js`](policies.js)), with the same rules
-  engine the web app uses ([`engine.js`](engine.js)), so the file and the screen always agree.
+- Every claim is evaluated under policy v1 and v2 (both defined in [`src/policies.js`](src/policies.js)), with the same rules
+  engine the web app uses ([`src/engine.js`](src/engine.js)), so the file and the screen always agree.
 - v2 follows the change notice: the quote limit falls to €1,200 (exactly €1,200 is still within it), and an
   `ev_high_voltage_battery` repair goes to human review whatever the quote, ahead of missing documents.
 - A closed claim keeps its v1 decision: `recommendation_v2` and `rule_v2` repeat v1, and `needs_recheck` is `False`.
@@ -76,7 +96,7 @@ decides.
 ## How it is built
 
 - Plain Node 22 ES modules, no framework and no runtime dependencies. Vanilla JS front end in [`public/`](public).
-- One web handler ([`handler.js`](handler.js)) runs on Node ([`server.js`](server.js)) and on Cloudflare Workers
+- One web handler ([`src/handler.js`](src/handler.js)) runs on Node ([`src/server.js`](src/server.js)) and on Cloudflare Workers
   with a SQLite Durable Object ([`worker/index.js`](worker/index.js), see [`CLOUDFLARE.md`](CLOUDFLARE.md)).
 - Every store is an append-only log, so decisions, reviews and policy versions can always be replayed.
 - ElevenLabs Agents for the voice call, Resend for email.

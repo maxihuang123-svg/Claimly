@@ -1,9 +1,9 @@
 import { Buffer } from 'node:buffer';
 import { DurableObject } from 'cloudflare:workers';
 import { accessGate, spaceOf } from '../calls/access.js';
-import { createDemoWorkspace } from '../demo-workspace.js';
-import { POLICY_V2 } from '../policies.js';
-import { examplesFrom } from '../validation.js';
+import { createDemoWorkspace } from '../src/demo-workspace.js';
+import { POLICY_V2 } from '../src/policies.js';
+import { examplesFrom } from '../src/validation.js';
 import { ENGINE_VERSION, EXAMPLES_CSV, JUDGE_CASES_CSV, DEMO_CASES_CSV } from './generated.js';
 
 // Cloudflare entry. The Worker checks the access code, serves public/ as static assets and

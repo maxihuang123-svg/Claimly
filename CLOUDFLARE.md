@@ -2,12 +2,12 @@
 
 The same app runs on Node (`npm start`, files under `data/`) and on Cloudflare (`npm run deploy`).
 
-- `handler.js` has every `/api/*` route as a web `Request` → `Response` handler.
-- `server.js` runs it on Node and serves `public/`.
+- `src/handler.js` has every `/api/*` route as a web `Request` → `Response` handler.
+- `src/server.js` runs it on Node and serves `public/`.
 - `worker/index.js` runs it on Cloudflare. The Worker checks the access code, serves `public/` as static assets and
   sends `/api/*` and the claimants' reply forms (`/reply/*`) to one Durable Object, which holds the app in memory like the Node process does.
 - Every store (reviews, policies, validation, outcomes, contacts, imported CSV files, uploaded documents) is an
-  append-only log (`storage.js`). On Node a log is a file. In the Durable Object it is rows in its SQLite storage.
+  append-only log (`src/storage.js`). On Node a log is a file. In the Durable Object it is rows in its SQLite storage.
 
 ## First deploy
 

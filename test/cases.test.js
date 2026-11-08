@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { CaseFileError, parseCaseFile as parseWithPolicy, REQUIRED_COLUMNS, reviewStillApplies } from '../cases.js';
-import { POLICY_V1 } from '../policies.js';
+import { CaseFileError, parseCaseFile as parseWithPolicy, REQUIRED_COLUMNS, reviewStillApplies } from '../src/cases.js';
+import { POLICY_V1 } from '../src/policies.js';
 
 const parseCaseFile = (text) => parseWithPolicy(text, POLICY_V1);
 const header = REQUIRED_COLUMNS.join(',');

@@ -3,9 +3,9 @@ import { test } from 'node:test';
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ValidationStore } from '../validation.js';
-import { POLICY_V1 } from '../policies.js';
-import { parseCaseFile } from '../cases.js';
+import { ValidationStore } from '../src/validation.js';
+import { POLICY_V1 } from '../src/policies.js';
+import { parseCaseFile } from '../src/cases.js';
 
 function fixture() {
   const dir = mkdtempSync(join(tmpdir(), 'impact-'));

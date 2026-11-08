@@ -11,7 +11,7 @@
 
 import { Buffer } from 'node:buffer';
 import { randomBytes, randomUUID } from 'node:crypto';
-import { readBytes, TooLarge } from '../body.js';
+import { readBytes, TooLarge } from '../src/body.js';
 import { askFor, canCall, joinList, missingFields, missingItems } from '../public/missing.js';
 
 const RESEND = 'https://api.resend.com';

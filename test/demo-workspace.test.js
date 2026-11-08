@@ -3,8 +3,8 @@ import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { createDemoWorkspace } from '../demo-workspace.js';
-import { fileImports } from '../storage.js';
+import { createDemoWorkspace } from '../src/demo-workspace.js';
+import { fileImports } from '../src/storage.js';
 
 const csv = readFileSync(new URL('../demo/practice_cases.csv', import.meta.url), 'utf8');
 test('demo preparation replaces data, records v1/v2 validation and survives restart and repeated preparation', async () => {

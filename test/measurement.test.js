@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { quality, OutcomeStore, measurementPayload } from '../measurement.js';
-import { ValidationStore } from '../validation.js';
-import { POLICY_V1 } from '../policies.js';
+import { quality, OutcomeStore, measurementPayload } from '../src/measurement.js';
+import { ValidationStore } from '../src/validation.js';
+import { POLICY_V1 } from '../src/policies.js';
 const row = (actual, expected) => ({ after: { actual: { recommendation: actual }, expected, correct: actual === expected } });
 test('quality uses an explicit denominator and separates expensive errors from escalations', () => {
   const rows = [row('routine_processing', 'human_review'), row('human_review', 'request_information'), row('human_review', 'human_review')];

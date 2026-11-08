@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { asLog } from '../storage.js';
+import { asLog } from '../src/storage.js';
 
 // Every attempt to reach a claimant, with what they said. Append-only like the review log:
 // a contact is created once and then patched as the call progresses.

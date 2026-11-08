@@ -12,7 +12,7 @@
 // The ElevenLabs key stays on the server. What the agent asks for is worked out here from the case,
 // never taken from the browser.
 
-import { readText, TooLarge } from '../body.js';
+import { readText, TooLarge } from '../src/body.js';
 import { canCall, joinList, missingFields, missingItems } from '../public/missing.js';
 
 const EL = 'https://api.elevenlabs.io/v1';

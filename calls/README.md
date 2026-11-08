@@ -36,7 +36,7 @@ must be served over HTTPS for the microphone to work, for example through `cloud
 
 ## Layout
 
-- `api.js`: the `/api/calls*` routes, on web `Request`/`Response`, mounted by `../handler.js` on Node and on Cloudflare.
+- `api.js`: the `/api/calls*` routes, on web `Request`/`Response`, mounted by `../src/handler.js` on Node and on Cloudflare.
 - `email.js`: the emails, the claimant's form at `/reply/<token>` and uploaded documents (`/api/documents`).
 - `contacts.js`: append-only contact log of calls and emails, on disk with Node and in Durable Object storage on Cloudflare.
 - `access.js`: the optional access code. On Cloudflare it runs in the Worker, in front of everything.

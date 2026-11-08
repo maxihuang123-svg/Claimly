@@ -3,9 +3,9 @@ import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { evaluate, normalizeCase } from '../engine.js';
-import { POLICY_V1 } from '../policies.js';
-import { ReviewError, ReviewLog } from '../reviews.js';
+import { evaluate, normalizeCase } from '../src/engine.js';
+import { POLICY_V1 } from '../src/policies.js';
+import { ReviewError, ReviewLog } from '../src/reviews.js';
 
 const record = normalizeCase({
   case_id: 'T-1', case_status: 'open', claim_summary: '', policy_active_on_incident: 'True',

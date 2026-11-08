@@ -3,7 +3,7 @@
 // Its client tool (CLIENT_TOOL) is created once and updated after that, found by its name.
 import { appendFileSync } from 'node:fs';
 import { AGENT_CONFIG, CLIENT_TOOL } from '../calls/agent-config.js';
-import { readEnv } from '../env.js';
+import { readEnv } from '../src/env.js';
 
 const ENV_FILE = '.env.local';
 const env = readEnv(ENV_FILE);

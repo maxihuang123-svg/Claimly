@@ -5,9 +5,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
-import { batchResults, RESULT_COLUMNS } from '../batch.js';
-import { REQUIRED_COLUMNS } from '../cases.js';
-import { parseCsv } from '../csv.js';
+import { batchResults, RESULT_COLUMNS } from '../src/batch.js';
+import { REQUIRED_COLUMNS } from '../src/cases.js';
+import { parseCsv } from '../src/csv.js';
 
 const BASE = {
   case_id: 'T-1', case_status: 'open', claim_summary: 'Test', policy_active_on_incident: 'True',
@@ -57,7 +57,7 @@ test('the command writes the results CSV in the required format', () => {
   const input = join(dir, 'claims.csv');
   const output = join(dir, 'out', 'results.csv');
   writeFileSync(input, csvOf({ quote_eur: '1300' }, { case_status: 'closed' }));
-  execFileSync(process.execPath, [fileURLToPath(new URL('../batch.js', import.meta.url)), input, output]);
+  execFileSync(process.execPath, [fileURLToPath(new URL('../src/batch.js', import.meta.url)), input, output]);
   const [header, ...lines] = readFileSync(output, 'utf8').trim().split('\n');
   assert.equal(header, RESULT_COLUMNS.join(','));
   assert.match(lines[0], /^T-1,routine_processing,human_review,True,v1\.rule3,v2\.rule1,/);

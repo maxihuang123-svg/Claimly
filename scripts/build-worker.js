@@ -3,12 +3,12 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { hash } from '../validation.js';
+import { hash } from '../src/validation.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (file) => readFileSync(join(root, file), 'utf8');
 
-const engineVersion = hash(['engine.js', 'cases.js', 'validation.js'].map(read));
+const engineVersion = hash(['src/engine.js', 'src/cases.js', 'src/validation.js'].map(read));
 // The judges' copy starts from the practice claims and the voice demo claims (worker/index.js); both files share one header.
 const [practice, demo] = ['test/practice_cases.csv', 'demo/voice_demo_cases.csv'].map((file) => read(file).trim().split(/\r?\n/));
 const judgeCases = `${[...practice, ...demo.slice(1)].join('\n')}\n`;

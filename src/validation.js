@@ -7,7 +7,7 @@ import { asLog } from './storage.js';
 
 export const examplesFrom = (text) => parseCsv(text)
   .map((row) => ({ case: normalizeCase(row), expected: row.expected_v1 }));
-const developmentExamples = () => examplesFrom(readFileSync(new URL('./test/labelled_development_cases.csv', import.meta.url), 'utf8'));
+const developmentExamples = () => examplesFrom(readFileSync(new URL('../test/labelled_development_cases.csv', import.meta.url), 'utf8'));
 
 // The v2 answers follow from the change notice, not from the engine: the supplied v1 answer, except for an open
 // claim the notice sends to human review (a quote over €1,200, or an EV high-voltage battery repair).

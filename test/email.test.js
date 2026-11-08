@@ -4,8 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { accessGate } from '../calls/access.js';
-import { createApp } from '../handler.js';
-import { fileDocuments, fileImports } from '../storage.js';
+import { createApp } from '../src/handler.js';
+import { fileDocuments, fileImports } from '../src/storage.js';
 
 const demo = readFileSync(new URL('../demo/voice_demo_cases.csv', import.meta.url), 'utf8');
 const header = demo.split('\n')[0].trim();

@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { Readable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
-import { accessGate } from './calls/access.js';
+import { accessGate } from '../calls/access.js';
 import { readEnv } from './env.js';
 import { createDemoWorkspace } from './demo-workspace.js';
 import { fileDocuments, fileImports } from './storage.js';
@@ -11,7 +11,7 @@ import { hash } from './validation.js';
 
 // Runs the app on Node with files under data/. The routes live in handler.js, which
 // worker/index.js also runs on Cloudflare.
-const root = dirname(fileURLToPath(import.meta.url));
+const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const env = readEnv(join(root, '.env.local'));
 const dataPath = (name, variable) => resolve(env[variable] ?? join(root, 'data', name));
 const casesPath = resolve(process.argv[2] ?? join(root, 'data/cases.csv'));
@@ -47,7 +47,7 @@ const app = createDemoWorkspace({
     outcomes: dataPath('outcomes.jsonl', 'OUTCOMES_PATH'),
     contacts: dataPath('contacts.jsonl', 'CONTACTS_PATH'),
   },
-  engineVersion: hash(['engine.js', 'cases.js', 'validation.js'].map((file) => readFileSync(join(root, file), 'utf8'))),
+  engineVersion: hash(['engine.js', 'cases.js', 'validation.js'].map((file) => readFileSync(join(root, 'src', file), 'utf8'))),
   env,
 }, readFileSync(join(root, 'demo/practice_cases.csv'), 'utf8'));
 const gate = accessGate(env.ACCESS_CODE);

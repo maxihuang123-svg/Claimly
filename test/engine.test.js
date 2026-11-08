@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { parseCsv } from '../csv.js';
-import { evaluate, normalizeCase } from '../engine.js';
-import { POLICY_V1 } from '../policies.js';
+import { parseCsv } from '../src/csv.js';
+import { evaluate, normalizeCase } from '../src/engine.js';
+import { POLICY_V1 } from '../src/policies.js';
 
 const labelled = parseCsv(readFileSync(new URL('./labelled_development_cases.csv', import.meta.url), 'utf8'));
 const base = {

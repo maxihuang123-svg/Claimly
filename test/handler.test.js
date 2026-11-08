@@ -3,9 +3,9 @@ import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { createApp } from '../handler.js';
-import { POLICY_V2 } from '../policies.js';
-import { fileImports } from '../storage.js';
+import { createApp } from '../src/handler.js';
+import { POLICY_V2 } from '../src/policies.js';
+import { fileImports } from '../src/storage.js';
 
 const practice = readFileSync(new URL('./practice_cases.csv', import.meta.url), 'utf8');
 
@@ -131,7 +131,7 @@ test('the before-and-after report scores v2 against the answers the change notic
 });
 
 test('website batch download matches the CLI format without importing claims', async () => {
-  const { batchResults, resultsCsv } = await import('../batch.js');
+  const { batchResults, resultsCsv } = await import('../src/batch.js');
   const app = appIn(mkdtempSync(join(tmpdir(), 'handler-batch-')));
   const response = await post(app, '/api/batch', practice, 'text/csv');
   assert.equal(response.status, 200);

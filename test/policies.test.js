@@ -3,9 +3,9 @@ import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { REQUIRED_COLUMNS } from '../cases.js';
-import { FIELDS } from '../engine.js';
-import { describePolicy, POLICY_CHOICES, POLICY_V1, PolicyError, PolicyStore, validatePolicy } from '../policies.js';
+import { REQUIRED_COLUMNS } from '../src/cases.js';
+import { FIELDS } from '../src/engine.js';
+import { describePolicy, POLICY_CHOICES, POLICY_V1, PolicyError, PolicyStore, validatePolicy } from '../src/policies.js';
 
 const freshStore = () => {
   const path = join(mkdtempSync(join(tmpdir(), 'policies-')), 'policies.jsonl');

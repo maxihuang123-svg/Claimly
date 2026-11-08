@@ -5,8 +5,8 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { createCallApi } from '../calls/api.js';
 import { ContactLog } from '../calls/contacts.js';
-import { evaluate, normalizeCase } from '../engine.js';
-import { POLICY_V1 } from '../policies.js';
+import { evaluate, normalizeCase } from '../src/engine.js';
+import { POLICY_V1 } from '../src/policies.js';
 import { canCall, missingItems } from '../public/missing.js';
 
 const row = {
