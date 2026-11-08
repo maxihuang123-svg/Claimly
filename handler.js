@@ -23,12 +23,22 @@ export const MAX_CSV_BYTES = 5 * 1024 * 1024;
 // Node with files, and worker/index.js runs it in a Durable Object on Cloudflare.
 // logs: { reviews, policies, validation, outcomes, contacts }, each a path or a log (storage.js).
 // imports: uploaded case files, documents: files claimants uploaded (storage.js). baseCases: CSV text loaded before them, if any.
-export function createApp({ logs, imports, documents = null, baseCases = null, engineVersion, examples, env = {}, fetch }) {
+// startPolicies: ready-made versions (such as POLICY_V2) released once into a new, empty policy log.
+export function createApp({ logs, imports, documents = null, baseCases = null, startPolicies = [], engineVersion, examples, env = {}, fetch }) {
   const items = new Map();
   const log = new ReviewLog(logs.reviews);
   const policies = new PolicyStore(logs.policies);
   const validation = new ValidationStore(logs.validation, engineVersion, examples);
   const outcomes = new OutcomeStore(logs.outcomes);
+  // Released as an approved change would be: open base cases whose next step changes are flagged for a recheck.
+  if (startPolicies.length && policies.versions.length === 1 && !policies.draft) {
+    const base = baseCases === null ? [] : parseCaseFile(baseCases, policies.original);
+    for (const policy of startPolicies) {
+      const recheck = base.filter((item) => item.case.case_status === 'open'
+        && evaluate(item.case, policy).recommendation !== item.automated.recommendation).map((item) => item.case.case_id);
+      policies.release(policy, { approved_by: 'Policy owner (change notice v2)', recheck_case_ids: recheck });
+    }
+  }
   const validationItems = () => [...items.values()].map(withReview);
   function selectedPolicy(version) {
     const policy = version === 'draft' ? policies.draft && { ...policies.draft, version: 'draft' } : policies.find(version);

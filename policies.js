@@ -35,6 +35,26 @@ export const POLICY_V1 = {
   ],
 };
 
+// Policy v2 from the case study's change notice: the quote limit falls to €1,200 (exactly €1,200 is still
+// within it), and an EV high-voltage battery repair goes to human review whatever the quote, ahead of missing
+// documents. Every other v1 rule and its order stay. The batch path (batch.js) always compares v1 with this
+// one; the judges' copy of the app starts with it activated. Later versions are made in the app.
+export const POLICY_V2 = {
+  version: 'v2',
+  activated_at: null,
+  change_note: 'Change notice v2: the quote limit falls to €1,200, and EV high-voltage battery repairs go to human review.',
+  rules: [
+    {
+      ...POLICY_V1.rules[0],
+      when_any: [
+        ...POLICY_V1.rules[0].when_any.map((item) => (item.field === 'quote_eur' ? condition('quote_eur', '>', 1200) : item)),
+        condition('repair_type', '=', 'ev_high_voltage_battery'),
+      ],
+    },
+    ...POLICY_V1.rules.slice(1),
+  ],
+};
+
 // What the policy page offers. A check is switched on or off, and the quote limit is
 // the only typed value. To offer a new check, add it here.
 export const POLICY_CHOICES = {
@@ -207,5 +227,12 @@ export class PolicyStore {
     };
     this.#write({ event: 'activated', policy });
     return policy;
+  }
+
+  // A ready-made version such as POLICY_V2, recorded like an activated draft under the next version number.
+  release(policy, details = {}) {
+    const released = { ...policy, version: `v${this.versions.length + 1}`, activated_at: new Date().toISOString(), ...details };
+    this.#write({ event: 'activated', policy: released });
+    return released;
   }
 }

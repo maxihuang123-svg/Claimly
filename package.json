@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
+    "batch": "node batch.js",
     "test": "node --test test/*.test.js",
     "agent": "node scripts/setup-agent.js",
     "dev:worker": "wrangler dev",

@@ -2,6 +2,7 @@ import { Buffer } from 'node:buffer';
 import { DurableObject } from 'cloudflare:workers';
 import { accessGate, spaceOf } from '../calls/access.js';
 import { createApp } from '../handler.js';
+import { POLICY_V2 } from '../policies.js';
 import { examplesFrom } from '../validation.js';
 import { ENGINE_VERSION, EXAMPLES_CSV, JUDGE_CASES_CSV } from './generated.js';
 
@@ -12,7 +13,7 @@ import { ENGINE_VERSION, EXAMPLES_CSV, JUDGE_CASES_CSV } from './generated.js';
 //
 // There are two objects, two separate copies of the data: "main" for the team (ACCESS_CODE) and "judges"
 // for the jury (JUDGE_CODE). The code is the same for both. The judges' copy starts from the practice and
-// demo claims, only pretends to send emails, and can be reset by the team (POST /api/admin/reset-judges).
+// demo claims with policy v2 already released, only pretends to send emails, and can be reset by the team (POST /api/admin/reset-judges).
 
 const CHUNK = 500_000; // characters per row, well under the 2 MB limit for one SQLite value
 
@@ -78,6 +79,7 @@ export class Claims extends DurableObject {
       engineVersion: ENGINE_VERSION,
       examples: examplesFrom(EXAMPLES_CSV),
       baseCases: judges ? JUDGE_CASES_CSV : null,
+      startPolicies: judges ? [POLICY_V2] : [],
       env: judges ? { ...this.env, EMAIL_DRY_RUN: 'true' } : this.env,
     });
   }

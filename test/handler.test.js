@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { createApp } from '../handler.js';
+import { POLICY_V2 } from '../policies.js';
 import { fileImports } from '../storage.js';
 
 const practice = readFileSync(new URL('./practice_cases.csv', import.meta.url), 'utf8');
@@ -100,4 +101,18 @@ test('an answer recorded during the call updates the claim at once', async () =>
   const after = await (await app.handle(new Request(`http://localhost/api/calls/result?id=${id}`))).json();
   assert.equal(after.contact.applied.during, 'call');
   assert.equal(app.items.get('DEMO-1').case.repair_type, 'standard');
+});
+
+test("a copy that starts with v2 released flags the open claims whose next step changes", async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'handler-'));
+  const logs = Object.fromEntries(['reviews', 'policies', 'validation', 'outcomes', 'contacts']
+    .map((name) => [name, join(dir, `${name}.jsonl`)]));
+  const open = () => createApp({ logs, imports: fileImports(join(dir, 'imports')), baseCases: practice,
+    startPolicies: [POLICY_V2], engineVersion: 'test', env: {} });
+  const app = open();
+  assert.deepEqual(app.policies.versions.map((policy) => policy.version), ['v1', 'v2']);
+  const flagged = (await (await app.handle(new Request('http://localhost/api/cases'))).json())
+    .cases.filter((item) => item.needs_recheck).map((item) => item.case.case_id);
+  assert.deepEqual(flagged, ['PRA-003', 'PRA-004', 'PRA-005', 'PRA-006']);
+  assert.equal(open().policies.versions.length, 2, 'released once, not again after a restart');
 });
