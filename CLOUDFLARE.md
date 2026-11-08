@@ -31,6 +31,13 @@ It prints a `https://claimly.<account>.workers.dev` URL. The site starts with no
 Put `ELEVENLABS_API_KEY=...` and `ACCESS_CODE=...` in `.dev.vars` (git-ignored), then `npm run dev:worker`
 and open http://localhost:8787. Its data is kept in `.wrangler/state`.
 
+## Judges' copy
+
+With `JUDGE_CODE` set, that code opens a second Durable Object ("judges") with its own data. It starts from
+`test/practice_cases.csv` and `demo/voice_demo_cases.csv`, emails there are recorded but not sent, and the team resets it
+with `POST /api/admin/reset-judges` (team cookie only). The code is shared, so every deploy updates both copies.
+A link like `https://<worker>/?code=<code>` logs in with one click.
+
 ## Limits
 
 - One Durable Object handles every request, one at a time. That is plenty for a team and a demo.

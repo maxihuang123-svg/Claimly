@@ -5,6 +5,9 @@ import { readText } from '../body.js';
 // A shared access code for when the app is reachable from outside (a tunnel or a deploy).
 // Off unless ACCESS_CODE is set. Entering the code once sets a cookie; everything else needs it,
 // except the claimant's reply form (calls/email.js), where the token in the link is the key.
+// On Cloudflare a second code, JUDGE_CODE, opens a separate copy of the data for the jury
+// (worker/index.js). Which copy a visitor sees follows from the code their cookie was made from.
+// A link like /?code=123456 logs in directly, so it can be shared as one click.
 
 const COOKIE = 'access';
 const MAX_AGE_SECS = 12 * 60 * 60;
@@ -12,12 +15,19 @@ const MAX_FAILURES_PER_MINUTE = 10; // across all visitors, so guessing a 6-digi
 
 export const tokenFor = (code) => createHmac('sha256', code).update('claims-review-access').digest('base64url');
 
-export function hasAccess(cookieHeader, code) {
+const same = (a, b) => a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
+
+// codes: the access code, or { main, judges } with one code per copy of the data. Unset codes are left out.
+const spacesOf = (codes) => Object.entries(typeof codes === 'string' ? { main: codes } : codes ?? {}).filter(([, code]) => code);
+
+// The copy the visitor's cookie gives access to ('main' or 'judges'), or null.
+export function spaceOf(cookieHeader, codes) {
   const sent = String(cookieHeader ?? '').split(';').map((part) => part.trim())
     .find((part) => part.startsWith(`${COOKIE}=`))?.slice(COOKIE.length + 1) ?? '';
-  const expected = Buffer.from(tokenFor(code));
-  return sent.length === expected.length && timingSafeEqual(Buffer.from(sent), expected);
+  return spacesOf(codes).find(([, code]) => same(sent, tokenFor(code)))?.[0] ?? null;
 }
+
+export const hasAccess = (cookieHeader, code) => spaceOf(cookieHeader, code) !== null;
 
 const page = (error) => `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -34,7 +44,7 @@ const page = (error) => `<!doctype html>
 <body><form method="post" action="/access">
   <h1>Claimly</h1>
   <label for="code">Access code</label>
-  <input id="code" name="code" inputmode="numeric" autocomplete="one-time-code" autofocus required>
+  <input id="code" name="code" autocomplete="one-time-code" autofocus required>
   ${error ? `<p role="alert">${error}</p>` : ''}
   <button type="submit">Open</button>
 </form></body></html>`;
@@ -54,35 +64,40 @@ async function readCode(request) {
 // Returns a handler that answers the request itself (login page, 401) with a Response,
 // or resolves to null when the request may go on. Web Request/Response, so it runs on
 // Node (server.js) and in the Cloudflare Worker alike.
-export function accessGate(code) {
-  if (!code) return async () => null;
-  const token = tokenFor(code);
+export function accessGate(codes) {
+  const spaces = spacesOf(codes);
+  if (!spaces.length) return async () => null;
   let failures = [];
 
-  return async (request) => {
-    const url = new URL(request.url);
-    if (url.pathname.startsWith('/reply/') || hasAccess(request.headers.get('cookie'), code)) return null;
-
-    if (request.method === 'POST' && url.pathname === '/access') {
-      const now = Date.now();
-      failures = failures.filter((time) => now - time < 60_000);
-      if (failures.length >= MAX_FAILURES_PER_MINUTE) {
-        return html(page('Too many wrong codes. Wait a minute and try again.'), 429);
-      }
-      const sent = await readCode(request);
-      if (sent.length === code.length && timingSafeEqual(Buffer.from(sent), Buffer.from(code))) {
-        const https = url.protocol === 'https:' || request.headers.get('x-forwarded-proto') === 'https';
-        return new Response(null, {
-          status: 303,
-          headers: {
-            Location: '/',
-            'Set-Cookie': `${COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${MAX_AGE_SECS}${https ? '; Secure' : ''}`,
-          },
-        });
-      }
+  function logIn(sent, url, request) {
+    const now = Date.now();
+    failures = failures.filter((time) => now - time < 60_000);
+    if (failures.length >= MAX_FAILURES_PER_MINUTE) {
+      return html(page('Too many wrong codes. Wait a minute and try again.'), 429);
+    }
+    const match = spaces.find(([, code]) => same(sent, code));
+    if (!match) {
       failures.push(now);
       return html(page('That code is not right.'), 401);
     }
+    const https = url.protocol === 'https:' || request.headers.get('x-forwarded-proto') === 'https';
+    return new Response(null, {
+      status: 303,
+      headers: {
+        Location: '/',
+        'Set-Cookie': `${COOKIE}=${tokenFor(match[1])}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${MAX_AGE_SECS}${https ? '; Secure' : ''}`,
+      },
+    });
+  }
+
+  return async (request) => {
+    const url = new URL(request.url);
+    // A code in the link logs in, or switches copy, even with a cookie already set.
+    if (request.method === 'GET' && url.pathname === '/' && url.searchParams.has('code')) {
+      return logIn(url.searchParams.get('code').trim(), url, request);
+    }
+    if (url.pathname.startsWith('/reply/') || spaceOf(request.headers.get('cookie'), codes)) return null;
+    if (request.method === 'POST' && url.pathname === '/access') return logIn(await readCode(request), url, request);
 
     if (url.pathname.startsWith('/api/')) {
       return new Response(JSON.stringify({ error: 'Enter the access code first. Reload the page.' }), {

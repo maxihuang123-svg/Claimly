@@ -154,3 +154,13 @@ test('the reply form is open without the access code; the claims team pages are 
   assert.equal((await gate(new Request('https://claimly.test/api/documents?id=abc'))).status, 401);
   assert.equal((await gate(new Request('https://claimly.test/api/emails', { method: 'POST' }))).status, 401);
 });
+
+test("in the judges' copy emails are recorded as sent without reaching Resend", async () => {
+  const { app, batches } = appIn(mkdtempSync(join(tmpdir(), 'email-')), { EMAIL_DRY_RUN: 'true' });
+  assert.equal((await (await importCsv(app, demo)).json()).summary.emailed, 3);
+  assert.equal(batches.length, 0);
+  const [email] = await emails(app);
+  assert.equal(email.simulated, true);
+  assert.ok(email.sent_at);
+  assert.equal((await request(app, `/reply/${email.token}`)).status, 200);
+});

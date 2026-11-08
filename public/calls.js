@@ -325,7 +325,7 @@ function renderEmail(contact) {
   return `<li class="contact">
     <p class="contact-head">${renderStatus(contact)}<span>Email, ${escapeHtml(formatTime(contact.created_at))}</span>
       <span>by ${escapeHtml(contact.initiated_by)}</span></p>
-    <p class="notice">Sent to ${escapeHtml(contact.to)}, asking for ${escapeHtml(joinList(contact.missing_items))}. Policy ${escapeHtml(contact.policy_version)}, ${escapeHtml(contact.rule_id)}.</p>
+    <p class="notice">${contact.simulated ? 'Demo copy: the email was not actually sent. Answer it as the claimant with the form link below.' : `Sent to ${escapeHtml(contact.to)}`}, asking for ${escapeHtml(joinList(contact.missing_items))}. Policy ${escapeHtml(contact.policy_version)}, ${escapeHtml(contact.rule_id)}.</p>
     ${contact.error ? `<p class="error">${escapeHtml(contact.error)}</p>` : ''}
     ${renderApplied(contact.applied, 'email')}
     ${renderReply(contact.reply)}

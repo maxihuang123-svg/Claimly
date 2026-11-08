@@ -142,19 +142,21 @@ function emailFor(item, link) {
 
 // documents: { save(id, bytes), read(id) } (storage.js). updateCase as in calls/api.js.
 export function createEmailApi({ env, findItem, contacts, documents, updateCase, fetch = globalThis.fetch }) {
-  const configured = () => Boolean(env.RESEND_API_KEY && env.CLAIMANT_EMAIL);
+  const dryRun = Boolean(env.EMAIL_DRY_RUN); // the judges' copy: recorded as sent, nothing is delivered
+  const configured = () => dryRun || Boolean(env.RESEND_API_KEY && env.CLAIMANT_EMAIL);
   const emailsFor = (caseId) => contacts.all().filter((contact) => contact.channel === 'email' && contact.case_id === caseId);
 
   // Records one contact per claim first, so every link exists before its email goes out, then sends them together.
   async function send(items, origin, initiatedBy) {
-    if (!env.RESEND_API_KEY) throw new EmailError(500, 'RESEND_API_KEY is not set on the server.');
-    if (!env.CLAIMANT_EMAIL) throw new EmailError(500, 'CLAIMANT_EMAIL is not set on the server.');
+    if (!dryRun && !env.RESEND_API_KEY) throw new EmailError(500, 'RESEND_API_KEY is not set on the server.');
+    if (!dryRun && !env.CLAIMANT_EMAIL) throw new EmailError(500, 'CLAIMANT_EMAIL is not set on the server.');
     const base = env.PUBLIC_URL ?? origin;
     const sent = items.map((item) => ({ item, contact: contacts.add({
       channel: 'email',
       case_id: item.case.case_id,
       initiated_by: initiatedBy,
-      to: env.CLAIMANT_EMAIL,
+      to: dryRun ? 'the claimant' : env.CLAIMANT_EMAIL,
+      ...(dryRun ? { simulated: true } : {}),
       missing_items: missingItems(item),
       policy_version: item.automated.policy_version,
       rule_id: item.automated.rule_id,
@@ -162,6 +164,7 @@ export function createEmailApi({ env, findItem, contacts, documents, updateCase,
       expires_at: new Date(Date.now() + LINK_DAYS * 86_400_000).toISOString(),
       reply: null,
     }) }));
+    if (dryRun) return sent.map(({ contact }) => contacts.update(contact.id, { sent_at: new Date().toISOString() }));
     let patch;
     try {
       const response = await fetch(`${RESEND}/emails/batch`, {
