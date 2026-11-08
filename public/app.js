@@ -6,9 +6,9 @@ import { helpIcon, renderHelp } from './help.js';
 import { startTour } from './tour.js';
 
 const OUTCOMES = {
-  routine_processing: { name: 'Routine processing', action: 'Send to routine processing.' },
-  request_information: { name: 'Request information', action: 'Request information.' },
-  human_review: { name: 'Human review', action: 'Send to human review.', help: 'Stays with a person.' },
+  routine_processing: { name: 'Routine processing', short: 'Routine', action: 'Send to routine processing.' },
+  request_information: { name: 'Request information', short: 'Request info', action: 'Request information.' },
+  human_review: { name: 'Human review', short: 'Human review', action: 'Send to human review.', help: 'Stays with a person.' },
 };
 const NOT_PROVIDED = 'Not provided';
 const TOAST_MS = 6000;
@@ -186,7 +186,7 @@ function renderBento() {
       <span class="card-label">Next step for ${plural(open.length, 'open claim')}</span>
       <div class="mix-bar" role="img" aria-label="${mix.map(([code, count]) => `${outcomeName(code)} ${count}`).join(', ')}">${mix.map(([code, count]) => (count ? `<span data-outcome="${code}" style="flex:${count}"></span>` : '')).join('')}</div>
       <ul class="mix-legend">${mix.map(([code, count]) => `<li><button type="button" ${target[code]} data-outcome="${code}">
-        <i class="outcome-dot"></i><span>${outcomeName(code)}</span><b>${count}</b><small>${pct(count, open.length)}%</small></button></li>`).join('')}</ul>
+        <i class="outcome-dot"></i><span title="${outcomeName(code)}">${OUTCOMES[code].short}</span><b>${count}</b><small>${pct(count, open.length)}%</small></button></li>`).join('')}</ul>
     </div>
     <div class="card stat">
       <span class="card-label">Active policy</span>
