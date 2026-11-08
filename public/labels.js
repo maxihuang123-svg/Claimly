@@ -3,7 +3,8 @@ import { pageHint } from './help.js';
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const names = { routine_processing: 'Routine processing', request_information: 'Request information', human_review: 'Human review' };
 const versionName = (version) => version === 'draft' ? 'Draft' : `Policy ${version}`;
-const sourceText = (source) => source === 'confirmed' ? 'Confirmed for these rules' : source === 'supplied' ? 'Supplied v1 answers' : 'Not confirmed yet · starting from v1 answers';
+const sourceText = (source) => source === 'confirmed' ? 'Confirmed for these rules' : source === 'supplied' ? 'Supplied v1 answers'
+  : source === 'notice' ? 'v2 answers from the change notice' : 'Not confirmed yet · starting from v1 answers';
 
 // One place to set the correct next step for each labelled development example, per policy.
 export function createLabelsUI({ root, active, request, flush, onValidation }) {

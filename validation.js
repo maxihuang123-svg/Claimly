@@ -1,13 +1,19 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { conditionText, evaluate, normalizeCase, RECOMMENDATIONS } from './engine.js';
-import { PolicyError, POLICY_V1, validatePolicy } from './policies.js';
+import { PolicyError, POLICY_V1, POLICY_V2, validatePolicy } from './policies.js';
 import { parseCsv } from './csv.js';
 import { asLog } from './storage.js';
 
 export const examplesFrom = (text) => parseCsv(text)
   .map((row) => ({ case: normalizeCase(row), expected: row.expected_v1 }));
 const developmentExamples = () => examplesFrom(readFileSync(new URL('./test/labelled_development_cases.csv', import.meta.url), 'utf8'));
+
+// The v2 answers follow from the change notice, not from the engine: the supplied v1 answer, except for an open
+// claim the notice sends to human review (a quote over €1,200, or an EV high-voltage battery repair).
+// Closed claims keep their v1 answer.
+export const noticeAnswer = (example) => (example.case.case_status !== 'closed'
+  && (example.case.quote_eur > 1200 || example.case.repair_type === 'ev_high_voltage_battery') ? 'human_review' : example.expected);
 
 export const hash = (value) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 export const rulesHash = (policy) => hash(policy.rules);
@@ -71,6 +77,9 @@ export class ValidationStore {
   }
   labelsFor(policy) {
     const saved = this.events.findLast((e) => e.type === 'labels' && e.rules_hash === rulesHash(policy) && e.examples_hash === hash(this.examples));
+    if (!saved && rulesHash(policy) === rulesHash(POLICY_V2)) {
+      return { source: 'notice', expected: Object.fromEntries(this.examples.map((e) => [e.case.case_id, noticeAnswer(e)])) };
+    }
     return { source: saved ? 'confirmed' : rulesHash(policy) === rulesHash(POLICY_V1) ? 'supplied' : 'v1_reference',
       expected: saved?.expected ?? Object.fromEntries(this.examples.map((e) => [e.case.case_id, e.expected])) };
   }

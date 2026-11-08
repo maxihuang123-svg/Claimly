@@ -116,3 +116,16 @@ test("a copy that starts with v2 released flags the open claims whose next step 
   assert.deepEqual(flagged, ['PRA-003', 'PRA-004', 'PRA-005', 'PRA-006']);
   assert.equal(open().policies.versions.length, 2, 'released once, not again after a restart');
 });
+
+test('the before-and-after report scores v2 against the answers the change notice gives', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'handler-'));
+  const logs = Object.fromEntries(['reviews', 'policies', 'validation', 'outcomes', 'contacts']
+    .map((name) => [name, join(dir, `${name}.jsonl`)]));
+  const app = createApp({ logs, imports: fileImports(join(dir, 'imports')), baseCases: practice,
+    startPolicies: [POLICY_V2], engineVersion: 'test', env: {} });
+  const report = await (await app.handle(new Request('http://localhost/api/measurement?baseline=v1&candidate=v2'))).json();
+  const [all, affected] = report.quality;
+  assert.deepEqual([all.before.correct.count, all.after.correct.count, all.total ?? all.after.correct.total], [14, 14, 14]);
+  assert.equal(affected.after.correct.count, affected.after.correct.total);
+  assert.equal(all.after.unnecessary_human.count, 0);
+});

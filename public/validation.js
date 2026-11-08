@@ -47,14 +47,14 @@ export function createValidationUI({ root, active, request, flush, onActivated, 
   function labelSetup() {
     const setup = state.data.preview.label_setup;
     if (!setup) return '';
-    const status = setup.source === 'confirmed' ? 'Confirmed for these rules.' : setup.source === 'supplied' ? 'Using the supplied v1 answers.' : 'Not confirmed yet. Scoring uses v1 answers until you confirm them.';
+    const status = setup.source === 'confirmed' ? 'Confirmed for these rules.' : setup.source === 'supplied' ? 'Using the supplied v1 answers.' : setup.source === 'notice' ? 'Using the v2 answers from the change notice.' : 'Not confirmed yet. Scoring uses v1 answers until you confirm them.';
     return `<section class="policy-change-note"><h2>Expected answers</h2><div class="label-link"><p>${setup.examples.length} labelled examples for ${esc(versionName(state.candidate))}. ${status}</p><button class="button" data-validation="labels">${setup.source === 'confirmed' ? 'Review expected answers' : 'Set expected answers'}</button></div></section>`;
   }
   function labelled(run) {
     const test = run.labelled;
     if (!test) return `<p class="notice">Run the comparison again to include labelled-example checks.</p>`;
     const reference = test.after.source === 'v1_reference';
-    const sourceName = (source) => source === 'v1_reference' ? 'v1 reference labels' : source === 'supplied' ? 'supplied v1 labels' : 'confirmed policy labels';
+    const sourceName = (source) => source === 'v1_reference' ? 'v1 reference labels' : source === 'supplied' ? 'supplied v1 labels' : source === 'notice' ? 'v2 labels from the change notice' : 'confirmed policy labels';
     const examples = [...test.examples].sort((a, b) => Number(b.after.incorrect_routine) - Number(a.after.incorrect_routine) || Number(a.after.correct) - Number(b.after.correct));
     const cell = (r) => `${pill(r.actual.recommendation)}<span class="cell-note">Expected: ${esc(names[r.expected])}</span><span class="labelled-status ${r.incorrect_routine ? 'routine-miss' : ''}">${r.correct ? 'Matches' : r.incorrect_routine ? 'Incorrect routine recommendation' : 'Does not match'}</span>`;
     return `<details class="labelled-checks"><summary><span>Labelled examples</span><span class="labelled-summary">Before ${test.before.correct}/${test.before.total} · After ${test.after.correct}/${test.after.total} match${test.after.incorrect_routine ? ` · ${test.after.incorrect_routine} routine ${reference ? (test.after.incorrect_routine === 1 ? 'mismatch' : 'mismatches') : (test.after.incorrect_routine === 1 ? 'error' : 'errors')}` : ''}</span></summary>
