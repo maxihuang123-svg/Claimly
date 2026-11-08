@@ -1,3 +1,5 @@
+import { pageHint } from './help.js';
+
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const names = { routine_processing: 'Routine processing', request_information: 'Request information', human_review: 'Human review' };
 const pill = (code) => `<span class="pill" data-outcome="${esc(code)}">${names[code] ?? 'Not provided'}</span>`;
@@ -19,7 +21,7 @@ export function createValidationUI({ root, active, request, flush, onActivated, 
     }
     const { preview, run, stale } = data;
     root.innerHTML = `<div class="validation-page">
-      <header class="validation-heading"><div><h1>Validation</h1><p>See what changes when your policy does.</p></div><span class="comparison-mode">${state.candidate === 'draft' ? 'Draft comparison' : 'Historical comparison'}</span></header>
+      <header class="validation-heading"><div><h1>Validation</h1><p>See what changes when your policy does.</p>${pageHint('validation', { short: true })}</div><span class="comparison-mode">${state.candidate === 'draft' ? 'Draft comparison' : 'Historical comparison'}</span></header>
       <section class="comparison-panel" aria-label="Choose policies to compare"><div class="validation-controls">
         ${field('validation-baseline', 'From', options(state.baseline, false))}
         <span class="comparison-arrow">${arrow}</span>

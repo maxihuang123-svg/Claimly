@@ -3,6 +3,7 @@
 // What a claimant says is shown as an unconfirmed note. It never changes the case or its review.
 
 import { canCall, joinList, missingItems } from './missing.js';
+import { pageHint } from './help.js';
 import { showIncomingCall } from './phone.js';
 
 const CLIENT_URL = 'https://esm.sh/@elevenlabs/client@1.35.0'; // loaded only when a browser call starts
@@ -427,6 +428,7 @@ function draw() {
 
   context.container.innerHTML = `<div data-calls-page>
     <div class="page-head"><h1>Missing information</h1><p class="progress">${progress}</p></div>
+    ${pageHint('calls')}
     ${renderBody()}
   </div>`;
 }

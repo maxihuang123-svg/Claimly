@@ -1,3 +1,5 @@
+import { pageHint } from './help.js';
+
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const names = { routine_processing: 'Routine processing', request_information: 'Request information', human_review: 'Human review' };
 const pct = (n, d) => d ? `${(100 * n / d).toFixed(1)}%` : 'Not measured';
@@ -16,7 +18,7 @@ export function createMeasurementUI({ root, active, request }) {
   let data = null, error = null, busy = false, saving = false, notice = '', requestId = 0, baseline = null, candidate = null;
   function render() {
     if (!active()) return;
-    root.innerHTML = `<div class="measurement-page"><div class="page-head"><h1>Measurement</h1><button class="button" data-measure="refresh" ${busy ? 'disabled' : ''}>${busy ? 'Refreshing…' : 'Refresh data'}</button></div>
+    root.innerHTML = `<div class="measurement-page"><div class="page-head"><h1>Measurement</h1><button class="button" data-measure="refresh" ${busy ? 'disabled' : ''}>${busy ? 'Refreshing…' : 'Refresh data'}</button></div>${pageHint('measurement', { short: true })}
       ${error ? `<p class="banner" role="alert">${esc(error)}</p>` : ''}
       ${notice ? `<p class="measurement-notice" role="status">${esc(notice)}</p>` : ''}
       ${!data ? '<p class="notice" role="status">Loading measurement data…</p>' : content(data)}

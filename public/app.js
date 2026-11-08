@@ -157,17 +157,6 @@ function renderNav() {
   }).join('');
 }
 
-// Every page module draws its own head, often again on its own (polling, saves). Rather than
-// touching each one, the hint for the current page is put back under the title whenever it goes missing.
-new MutationObserver(() => {
-  if (dom.page.querySelector('[data-page-hint]')) return;
-  const described = dom.page.querySelector('.validation-heading > div'); // title block with its own description
-  if (described) { described.insertAdjacentHTML('beforeend', pageHint(state.pageId, { short: true })); return; }
-  const head = dom.page.querySelector('.page-head');
-  const hint = pageHint(state.pageId, { short: !!dom.page.querySelector('.measurement-intro') });
-  if (head && hint) head.insertAdjacentHTML('afterend', hint);
-}).observe(dom.page, { childList: true, subtree: true });
-
 function render() {
   renderNav();
   PAGES.find((page) => page.id === state.pageId).render();
@@ -235,6 +224,7 @@ function renderHead() {
     <button type="button" class="button" data-import ${state.importing ? 'disabled' : ''}>${state.importing ? 'Importing' : 'Import CSV'}</button>
     <input type="file" id="file" accept=".csv,text/csv" hidden>
   </div>
+  ${pageHint('claims')}
   ${state.banner ? `<div class="banner" role="alert"><span>${escapeHtml(state.banner)}</span>
     <button type="button" class="link" data-dismiss>Dismiss</button></div>` : ''}`;
 }
@@ -593,6 +583,7 @@ function renderPolicies() {
     <h1>Policies</h1>
     <button type="button" class="button" data-policy-action="edit" ${state.policyBusy ? 'disabled' : ''}>${draft ? 'Continue draft' : 'Edit policy'}</button>
   </div>
+  ${pageHint('policies')}
   ${state.policyError ? `<div class="banner" role="alert"><span>${escapeHtml(state.policyError)}</span></div>` : ''}
   <div class="policy-grid">${renderPolicyDoc(open)}${renderVersions()}</div>`;
 }

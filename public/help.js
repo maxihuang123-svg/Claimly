@@ -6,8 +6,8 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => 
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]
 ));
 
-// Set this to an email address or URL to show a real contact in "Problems or questions".
-const SUPPORT_CONTACT = null;
+// The contact in "Problems or questions": an email address or URL. Fictional for the demo, like claims@claimly.example.
+const SUPPORT_CONTACT = 'support@claimly.example';
 
 export const helpIcon = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="6"/><path d="M6.3 6.2a1.8 1.8 0 0 1 3.5.6c0 1.2-1.8 1.5-1.8 2.6M8 11.6h.01"/></svg>';
 
