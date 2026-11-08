@@ -2,6 +2,7 @@ import { createMeasurementUI } from './measurement.js';
 import { createValidationUI } from './validation.js';
 import { createLabelsUI } from './labels.js';
 import { callsIcon, renderCalls } from './calls.js';
+import { helpIcon, pageHint, renderHelp } from './help.js';
 
 const OUTCOMES = {
   routine_processing: { name: 'Routine processing', action: 'Send to routine processing.' },
@@ -28,14 +29,20 @@ const STATE_LABELS = {
 };
 
 // Sidebar pages. To add one, add an entry here with a render function.
+// group sorts the sidebar by who uses a page: reviewers first, then rule owners, then help.
 const PAGES = [
-  { id: 'claims', label: 'Claims review', icon: ICONS.table, render: renderClaims },
-  { id: 'policies', label: 'Policies', icon: ICONS.document, render: renderPolicies },
-  { id: 'measurement', label: 'Measurement', icon: ICONS.flag, render: () => measurementUI.render() },
-  { id: 'labels', label: 'Expected answers', icon: ICONS.tag, render: () => labelsUI.render() },
-  { id: 'validation', label: 'Validation', icon: ICONS.check, render: () => validationUI.render() },
-  { id: 'calls', label: 'Missing information', icon: callsIcon, render: () => renderCalls({ container: dom.page, items: state.items, status: state.status, onClaimsChanged: reloadClaims }) },
+  { id: 'claims', group: 'review', label: 'Claims review', icon: ICONS.table, render: renderClaims },
+  { id: 'calls', group: 'review', label: 'Missing information', icon: callsIcon, render: () => renderCalls({ container: dom.page, items: state.items, status: state.status, onClaimsChanged: reloadClaims }) },
+  { id: 'policies', group: 'rules', label: 'Policies', icon: ICONS.document, render: renderPolicies },
+  { id: 'measurement', group: 'rules', label: 'Measurement', icon: ICONS.flag, render: () => measurementUI.render() },
+  { id: 'labels', group: 'rules', label: 'Expected answers', icon: ICONS.tag, render: () => labelsUI.render() },
+  { id: 'validation', group: 'rules', label: 'Validation', icon: ICONS.check, render: () => validationUI.render() },
+  { id: 'help', group: 'help', label: 'Help', icon: helpIcon, render: () => renderHelp({
+    container: dom.page, outcomes: OUTCOMES, reasons: state.reasons, policyVersion: state.policyVersion,
+    counts: { toReview: reviewItems().filter((item) => !item.review).length, recheck: state.items.filter((item) => item.needs_recheck).length },
+  }) },
 ];
+const NAV_GROUPS = { review: 'Review', rules: 'Rules & quality' };
 
 const RULE_HEADINGS = {
   human_review: 'Send to human review if any of these is true',
@@ -58,6 +65,7 @@ const state = {
   reasons: [],
   filter: 'queue',
   expandedId: null,
+  cursor: null, // case ID of the row the keyboard is on
   popupPlacement: null,
   reviewer: '',
   drafts: new Map(),
@@ -141,9 +149,24 @@ function draftFor(item) {
 /* Shell */
 
 function renderNav() {
-  dom.nav.innerHTML = PAGES.map((page) => `<li><button type="button" data-page="${page.id}"
-    ${page.id === state.pageId ? 'aria-current="page"' : ''}>${page.icon}${escapeHtml(page.label)}</button></li>`).join('');
+  dom.nav.innerHTML = PAGES.map((page, index) => {
+    const heading = page.group !== PAGES[index - 1]?.group && NAV_GROUPS[page.group]
+      ? `<li class="nav-group">${NAV_GROUPS[page.group]}</li>` : '';
+    return `${heading}<li${page.group === 'help' ? ' class="nav-help"' : ''}><button type="button" data-page="${page.id}"
+    ${page.id === state.pageId ? 'aria-current="page"' : ''}>${page.icon}${escapeHtml(page.label)}</button></li>`;
+  }).join('');
 }
+
+// Every page module draws its own head, often again on its own (polling, saves). Rather than
+// touching each one, the hint for the current page is put back under the title whenever it goes missing.
+new MutationObserver(() => {
+  if (dom.page.querySelector('[data-page-hint]')) return;
+  const described = dom.page.querySelector('.validation-heading > div'); // title block with its own description
+  if (described) { described.insertAdjacentHTML('beforeend', pageHint(state.pageId, { short: true })); return; }
+  const head = dom.page.querySelector('.page-head');
+  const hint = pageHint(state.pageId, { short: !!dom.page.querySelector('.measurement-intro') });
+  if (head && hint) head.insertAdjacentHTML('afterend', hint);
+}).observe(dom.page, { childList: true, subtree: true });
 
 function render() {
   renderNav();
@@ -151,6 +174,50 @@ function render() {
 }
 
 /* Claims page */
+
+// Overview cards above the table. Every number is a filter or page away.
+function renderBento() {
+  const open = state.items.filter((item) => !isClosed(item));
+  const mix = Object.keys(OUTCOMES).map((code) => [code, open.filter((item) => item.automated.recommendation === code).length]);
+  const items = reviewItems();
+  const reviewed = items.filter((item) => item.review).length;
+  const changed = items.filter((item) => item.review?.outcome === 'changed').length;
+  const recheck = state.items.filter((item) => item.needs_recheck).length;
+  const pct = (part, whole) => (whole ? Math.round((part / whole) * 100) : 0);
+  const target = { routine_processing: 'data-filter="routed"', request_information: 'data-page="calls"', human_review: 'data-filter="queue"' };
+  return `<section class="bento" aria-label="Overview">
+    <div class="card stat">
+      <span class="card-label">Waiting for review</span>
+      <strong class="stat-value">${items.length - reviewed}</strong>
+      <div class="meter" role="img" aria-label="${reviewed} of ${items.length} reviewed"><span style="width:${pct(reviewed, items.length)}%"></span></div>
+      <span class="card-foot">${reviewed} of ${items.length} reviewed${changed ? ` · ${changed} changed` : ''}</span>
+    </div>
+    <div class="card mix">
+      <span class="card-label">Next step for ${plural(open.length, 'open claim')}</span>
+      <div class="mix-bar" role="img" aria-label="${mix.map(([code, count]) => `${outcomeName(code)} ${count}`).join(', ')}">${mix.map(([code, count]) => (count ? `<span data-outcome="${code}" style="flex:${count}"></span>` : '')).join('')}</div>
+      <ul class="mix-legend">${mix.map(([code, count]) => `<li><button type="button" ${target[code]} data-outcome="${code}">
+        <i class="outcome-dot"></i><span>${outcomeName(code)}</span><b>${count}</b><small>${pct(count, open.length)}%</small></button></li>`).join('')}</ul>
+    </div>
+    <div class="card stat">
+      <span class="card-label">Active policy</span>
+      <strong class="stat-value">${escapeHtml(state.policyVersion)}</strong>
+      <span class="status${recheck ? ' status-warn' : ''}">${recheck ? `${plural(recheck, 'claim')} to recheck` : 'In use · no rechecks'}</span>
+      <button type="button" class="card-link" data-page="policies">View rules ${ICONS.arrow}</button>
+    </div>
+  </section>`;
+}
+
+const kbd = (key) => `<kbd>${key}</kbd>`;
+function renderKeys() {
+  const filters = renderFilters().match(/data-filter=/g).length;
+  return `<footer class="keys" aria-label="Keyboard shortcuts">
+    <span>${kbd('↑')}${kbd('↓')} or ${kbd('J')}${kbd('K')} Move</span>
+    <span>${kbd('↵')} Open review</span>
+    <span>${kbd('Esc')} Close</span>
+    <span>${kbd('1')}–${kbd(String(filters))} Filters</span>
+    <span>${kbd('?')} Help</span>
+  </footer>`;
+}
 
 function renderHead() {
   const items = reviewItems();
@@ -184,7 +251,7 @@ function renderFilters() {
     ...(closedItems().length ? [['closed', 'Closed', closedItems().length]] : []),
   ];
   return `<div class="filters" role="group" aria-label="Filter claims">${filters.map(([key, label, count]) => (
-    `<button type="button" data-filter="${key}" aria-pressed="${state.filter === key}">${label} ${count}</button>`
+    `<button type="button" data-filter="${key}" aria-pressed="${state.filter === key}">${label} <span class="count">${count}</span></button>`
   )).join('')}</div>`;
 }
 
@@ -208,7 +275,7 @@ function renderRow(item) {
   const quote = record.quote_eur === null ? NOT_PROVIDED : `€${record.quote_eur.toLocaleString('en-US')}`;
   const status = record.case_status ? humanize(record.case_status) : NOT_PROVIDED;
 
-  return `<tr class="row" data-row="${id}">
+  return `<tr class="row${record.case_id === state.cursor ? ' row-active' : ''}" data-row="${id}">
     <td class="c-case">${id}</td>
     <td class="c-summary" title="${escapeHtml(record.claim_summary)}">${escapeHtml(record.claim_summary)}</td>
     <td class="c-quote">${quote}</td>
@@ -364,7 +431,9 @@ function renderClaims() {
   }
   const focusId = document.activeElement?.id;
   const focusedDecision = document.activeElement?.dataset.decision;
-  dom.page.innerHTML = renderHead() + renderFilters() + renderTable()
+  const rows = visibleItems().length;
+  dom.page.innerHTML = renderHead() + (state.items.length ? renderBento() : '')
+    + `<section class="card table-card">${renderFilters()}${renderTable()}${rows ? renderKeys() : ''}</section>`
     + '<aside id="rule-tooltip" class="rule-tooltip" popover="manual" role="tooltip"></aside>'
     + (state.expandedId ? renderReviewPopup(findItem(state.expandedId)) : '');
   const popup = dom.page.querySelector('.review-popup');
@@ -609,6 +678,7 @@ function applyPolicies(data) {
 
 function toggleRow(id) {
   state.expandedId = state.expandedId === id ? null : id;
+  state.cursor = id;
   state.popupPlacement = null;
 
   state.error = null;
@@ -956,6 +1026,36 @@ document.addEventListener('keydown', (event) => {
   options[next].focus({ preventScroll: true });
 });
 
+/* Keyboard: move through claims, open a review, switch filters, open help */
+
+const isTyping = (target) => target?.closest?.('input, textarea, select, [contenteditable="true"], .review-popup, .reason-picker');
+
+function moveCursor(rows, index) {
+  state.cursor = rows[index].dataset.row;
+  rows.forEach((row, n) => row.classList.toggle('row-active', n === index));
+  rows[index].scrollIntoView({ block: 'nearest' });
+}
+
+document.addEventListener('keydown', (event) => {
+  if (event.metaKey || event.ctrlKey || event.altKey || event.defaultPrevented || isTyping(event.target)) return;
+  const { key } = event;
+  if (key === '?') { event.preventDefault(); goToPage('help'); return; }
+  if (state.pageId !== 'claims' || state.expandedId) return;
+  if (/^[1-9]$/.test(key)) {
+    const button = dom.page.querySelectorAll('.table-card .filters button')[Number(key) - 1];
+    if (button) { event.preventDefault(); setFilter(button.dataset.filter); }
+    return;
+  }
+  const rows = [...dom.page.querySelectorAll('.claims [data-row]')];
+  if (!rows.length) return;
+  const index = rows.findIndex((row) => row.dataset.row === state.cursor);
+  if (key === 'ArrowDown' || key === 'j') moveCursor(rows, index < 0 ? 0 : Math.min(rows.length - 1, index + 1));
+  else if (key === 'ArrowUp' || key === 'k') moveCursor(rows, index < 0 ? 0 : Math.max(0, index - 1));
+  else if ((key === 'Enter' || key === 'o') && index >= 0 && !event.target.closest('button, a')) toggleRow(state.cursor);
+  else return;
+  event.preventDefault();
+});
+
 /* Events */
 
 document.addEventListener('click', (event) => {
@@ -963,7 +1063,14 @@ document.addEventListener('click', (event) => {
   if (button) {
     const { page, filter, toggle, decision, policyAction } = button.dataset;
     if (policyAction) policyActions[policyAction](button.dataset);
-    else if (page) goToPage(page);
+    else if (page) {
+      goToPage(page);
+      if (state.pageId === page) {
+        const target = document.getElementById(button.dataset.helpSection ? `help-${button.dataset.helpSection}` : 'page');
+        if (button.dataset.helpSection) target?.scrollIntoView({ block: 'start' });
+        else dom.page.scrollTop = 0;
+      }
+    }
     else if (filter) setFilter(filter);
     else if (toggle) toggleRow(toggle);
     else if ('reasonMenu' in button.dataset) toggleReasonMenu();

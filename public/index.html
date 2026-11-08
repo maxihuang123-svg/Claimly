@@ -3,14 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Claims review</title>
+  <title>Claimly</title>
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/calls.css">
 </head>
 <body>
   <!--
-    Claims review.
+    Claimly: claims review.
     THESIS: One table. Clicking a row opens recommendation, reason, evidence and action in place. The full trace waits behind Show details.
     SCENE: A claims handler at a desktop in daylight, working through rows with a mouse.
     COLOR: Neutrals. Color marks the three outcomes, nothing else.
@@ -18,9 +18,11 @@
     SHELL: The sidebar lists pages. Add a page by adding one entry to PAGES in app.js.
   -->
   <aside class="sidebar">
+    <div class="brand"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5l3 3 6-7"/></svg></span><span class="brand-name">Claimly</span></div>
     <nav aria-label="Pages"><ul class="nav" id="nav"></ul></nav>
+    <p class="sidebar-foot"><kbd>?</kbd> Help and shortcuts</p>
   </aside>
-  <main class="page" id="page"></main>
+  <div class="panel"><main class="page" id="page"></main></div>
   <div class="toast" id="toast" role="status" hidden></div>
   <script type="module" src="/app.js"></script>
 </body>
