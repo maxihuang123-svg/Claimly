@@ -36,7 +36,7 @@ closed claims and blank fields.
 **Live:** https://claimly.maxi-huang1234.workers.dev, behind an access code. Judges receive their access link with
 our submission. It logs in with one click and opens a separate copy of the app for the jury, with the practice
 claims, three voice demo claims and policy v2 already activated, so nothing a judge changes affects anyone else.
-Click **Start tutorial** in the sidebar for a one-minute walkthrough.
+Click **Start tutorial** in the sidebar for a guided walkthrough.
 
 To run it locally:
 

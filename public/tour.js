@@ -5,7 +5,7 @@
 const STEPS = [
   {
     page: 'claims', target: '.brand', title: 'Welcome to Claimly',
-    text: 'Claimly checks every motor claim against your written policy and suggests the next step. A person decides wherever it matters. This tour shows the whole flow in about a minute.',
+    text: 'Claimly checks every motor claim against your written policy and suggests the next step. A person decides wherever it matters. This tour walks you through the whole flow.',
   },
   {
     page: 'claims', target: '[data-import]', title: 'Import claims',
