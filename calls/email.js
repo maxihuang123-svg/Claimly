@@ -54,6 +54,7 @@ const capitalize = (text) => text[0].toUpperCase() + text.slice(1);
 const json = (body, status = 200) => new Response(JSON.stringify(body), {
   status, headers: { 'Content-Type': 'application/json; charset=utf-8' },
 });
+const details = (item) => (missingItems(item).length > 1 ? 'a few more details' : 'one more detail');
 const fileType = (bytes) => FILE_TYPES.find(([, magic]) => magic.every((byte, index) => bytes[index] === byte))?.[0] ?? null;
 
 /* The claimant's pages. Plain HTML forms, so they work on any phone without scripts. */
@@ -69,7 +70,7 @@ const page = (title, body, status = 200) => new Response(`<!doctype html>
   p { margin: 0; }
   form { display: grid; gap: 20px; }
   fieldset { display: grid; gap: 10px; margin: 0; padding: 16px; border: 1px solid #dfe2e6; border-radius: 8px; background: #fff; }
-  legend { padding: 0 4px; font-weight: 650; }
+  legend { float: left; padding: 0; font-size: 17px; font-weight: 650; } /* inside the box, not on its border */
   .choice { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid #dfe2e6; border-radius: 6px; cursor: pointer; }
   .choice:has(input:checked) { border-color: #14181d; box-shadow: inset 0 0 0 1px #14181d; }
   .choice input { margin-top: 4px; }
@@ -108,7 +109,7 @@ function fieldInput(field) {
 }
 
 const formPage = (item, fields, error = '') => page(`Claim ${item.case.case_id}`, `
-  <h1>Claim ${escapeHtml(item.case.case_id)}: one more detail</h1>
+  <h1>Claim ${escapeHtml(item.case.case_id)}: ${details(item)}</h1>
   <p>Before your claim can move on, we still need ${escapeHtml(joinList(missingItems(item)))}. It takes under a minute.</p>
   ${error ? `<p class="error" role="alert">${escapeHtml(error)}</p>` : ''}
   <form method="post" enctype="multipart/form-data">
@@ -122,7 +123,7 @@ function emailFor(item, link) {
   const id = item.case.case_id;
   const needed = joinList(missingItems(item));
   return {
-    subject: `Claim ${id}: one more detail is needed`,
+    subject: `Claim ${id}: ${details(item)} ${missingItems(item).length > 1 ? 'are' : 'is'} needed`,
     text: `Hello,\n\nWe are processing your motor claim ${id}. Before it can move on, we still need ${needed}.\n\n`
       + `It takes under a minute: ${link}\n\nThe link works for ${LINK_DAYS} days. We will never ask for bank details, passwords or ID numbers.\n\n`
       + 'Claimly Claims\n(Claimly is a fictional insurer in a demo.)',

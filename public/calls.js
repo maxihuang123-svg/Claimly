@@ -256,13 +256,13 @@ const isEmail = (contact) => contact.channel === 'email';
 function contactStatus(contact) {
   if (contact.error) return ['failed', 'Failed'];
   if (isEmail(contact)) {
-    if (contact.applied) return ['done', 'Claim updated'];
+    if (contact.applied) return ['done', 'Email → Updated'];
     if (contact.reply) return ['done', 'Answered'];
     if (Date.now() > Date.parse(contact.expires_at)) return ['warn', 'Link expired'];
     return ['active', 'Email sent'];
   }
   if (state.session?.contactId === contact.id) return ['active', 'In call'];
-  if (contact.applied) return ['done', 'Claim updated'];
+  if (contact.applied) return ['done', 'Call → Updated'];
   const status = contact.result?.status;
   if (status === 'done') {
     const reached = contact.result.data.claimant_reached?.value;

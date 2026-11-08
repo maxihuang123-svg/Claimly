@@ -12,7 +12,7 @@
 .call-row[data-open="true"] > td { background: var(--sunken); border-bottom-color: transparent; }
 
 .c-missing { width: 34%; }
-.c-contact { width: 112px; }
+.c-contact { width: 136px; }
 td.c-missing { color: var(--ink-2); }
 
 .call-status {
