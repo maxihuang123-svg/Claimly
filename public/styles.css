@@ -638,7 +638,9 @@ textarea {
 .review-popup .action-row { display: grid; grid-template-columns: minmax(0, 1fr); }
 .review-popup .text-input { width: 100%; min-height: 38px; padding: 8px 10px; }
 .review-popup textarea { resize: vertical; min-height: 64px; }
-.review-footer { display: flex; justify-content: flex-end; align-items: center; gap: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.review-footer { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.review-popup .review-footer > button { max-width: 100%; min-height: 36px; text-align: center; white-space: normal; overflow-wrap: anywhere; }
+.review-popup .review-footer [data-confirm], .review-popup .review-footer [data-change] { flex: 1 1 max-content; }
 .review-popup .review-footer .save { min-width: 112px; min-height: 36px; text-align: center; }
 .review-popup .save:disabled { cursor: default; opacity: 0.5; }
 
