@@ -30,7 +30,7 @@ const OUTCOME_GUIDE = {
 const GLOSSARY = [
   ['Policy version', 'A numbered set of rules (v1, v2, …). Every recommendation and every review records the version it used.'],
   ['Rule and check', 'A rule is a group of checks. Each check shows OK, Triggered, or Cannot check when a fact is missing.'],
-  ['Routed automatically', 'Claims the policy did not send to a person. You can still open and spot-check them.'],
+  ['Routed automatically', 'Claims the policy did not send to a person. They are on All claims, for spot checks.'],
   ['Policy recheck', 'Open claims whose outcome may change under a newly activated policy. They need a review again.'],
   ['Correction', 'A reviewer changed the system’s recommendation. The original stays on record next to the correction.'],
   ['Labelled example', 'A test claim with an agreed correct answer. Used to score policies, never to decide real claims.'],
@@ -84,11 +84,11 @@ export function renderHelp({ container, outcomes, reasons, policyVersion, counts
 
     ${section('review', 'Review a claim', `
       <ol class="help-steps">
-        <li><strong>Open Claims review.</strong> The <em>Human review</em> filter lists claims that need a person; <em>To review</em> narrows it to the ones nobody has done yet.</li>
+        <li><strong>Open Claims review.</strong> It lists only the claims that need a person.</li>
         <li><strong>Read the row.</strong> <em>Recommendation</em> is the system’s suggested next step and <em>Why</em> is the short reason. Point at the recommendation to see the exact rule and which checks it triggered.</li>
         <li><strong>Click Review decision</strong> and enter your name as Reviewer.</li>
         <li><strong>Decide.</strong> For a claim sent to ${pill('human_review')}, choose the next step it should take now, pick a reason and add a note if useful. Then <em>Save review</em>.</li>
-        <li><strong>Spot-check the rest.</strong> Under <em>Routed automatically</em> you can open any claim and either confirm it or use <em>Change recommendation</em>.</li>
+        <li><strong>Spot-check the rest.</strong> On <em>All claims</em> you can open any claim and either confirm it or use <em>Change recommendation</em>.</li>
       </ol>`)}
 
     ${section('outcomes', 'The three next steps', `
@@ -109,7 +109,7 @@ export function renderHelp({ container, outcomes, reasons, policyVersion, counts
         <li><strong>Draft.</strong> On Policies, <em>Edit policy</em> starts a draft of the next version. The current policy keeps running.</li>
         <li><strong>Check the impact.</strong> <em>Review draft</em> opens Validation, which shows every claim whose next step would change, and how the draft scores on the test examples.</li>
         <li><strong>Activate.</strong> Once you are satisfied, enter your name under <em>Approved by</em> on Validation and click <em>Activate draft</em>.</li>
-        <li><strong>Recheck.</strong> Open claims whose outcome changes appear under the <em>Policy recheck</em> filter on Claims review and need a review again.</li>
+        <li><strong>Recheck.</strong> Open claims whose outcome changes appear on <em>Claims review</em> again.</li>
       </ol>`)}
 
     ${section('quality', 'Quality pages', `

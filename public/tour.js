@@ -12,12 +12,8 @@ const STEPS = [
     text: 'Upload a CSV file of claims. Every claim is checked against the active policy straight away.',
   },
   {
-    page: 'claims', target: '.bento .mix', title: 'Where every claim goes',
-    text: 'Each open claim gets one of three next steps: routine processing, request information or human review. Click a step to see its claims.',
-  },
-  {
-    page: 'claims', target: '.table-card .filters', title: 'Work through the queue',
-    text: 'Human review lists the claims that need a person. Routed automatically shows the rest, for spot checks.',
+    page: 'claims', target: '.table-card', title: 'Your queue',
+    text: 'Only the claims that need a person. Once reviewed, a claim leaves this list.',
   },
   {
     page: 'claims', target: '.claims .rule-trigger', title: 'Why this recommendation?',
@@ -26,6 +22,10 @@ const STEPS = [
   {
     page: 'claims', target: '.claims .review-edit', title: 'Review a decision',
     text: 'Confirm or correct the recommendation and give a reason. Nothing is overwritten: every review is recorded next to the original.',
+  },
+  {
+    page: 'all', target: '.bento .mix', title: 'All claims',
+    text: 'Every claim, including the ones routed automatically and those already reviewed. Click a next step to see its claims.',
   },
   {
     page: 'calls', target: '[data-calls-page] .page-head', title: 'Missing information',

@@ -22,6 +22,7 @@ const ICONS = {
   table: svg('<path d="M2.5 3.5h11v9h-11zM2.5 6.5h11M6.5 6.5v6"/>', 1.5),
   document: svg('<path d="M4 2.5h5.5L12.5 5.5v8H4zM6.5 8h4M6.5 10.5h4"/>', 1.5),
   tag: svg('<path d="M2.5 2.5h5.2l5.8 5.8-5.2 5.2-5.8-5.8zM5.5 5.5h.01"/>', 1.5),
+  inbox: svg('<path d="M2.5 9h3l1 2h3l1-2h3M4 3h8l1.5 6v4h-11V9z"/>', 1.5),
 };
 const STATE_LABELS = {
   pass: [ICONS.check, 'OK'],
@@ -32,8 +33,9 @@ const STATE_LABELS = {
 // Sidebar pages. To add one, add an entry here with a render function.
 // group sorts the sidebar by who uses a page: reviewers first, then rule owners, then help.
 const PAGES = [
-  { id: 'claims', group: 'review', label: 'Claims review', icon: ICONS.table, render: renderClaims },
+  { id: 'claims', group: 'review', label: 'Claims review', icon: ICONS.inbox, render: renderClaims },
   { id: 'calls', group: 'review', label: 'Missing information', icon: callsIcon, render: () => renderCalls({ container: dom.page, items: state.items, status: state.status, onClaimsChanged: reloadClaims }) },
+  { id: 'all', group: 'rules', label: 'All claims', icon: ICONS.table, render: renderClaims },
   { id: 'policies', group: 'rules', label: 'Policies', icon: ICONS.document, render: renderPolicies },
   { id: 'measurement', group: 'rules', label: 'Measurement', icon: ICONS.flag, render: () => measurementUI.render() },
   { id: 'labels', group: 'rules', label: 'Expected answers', icon: ICONS.tag, render: () => labelsUI.render() },
@@ -64,7 +66,7 @@ const state = {
   items: [],
   recommendations: [],
   reasons: [],
-  filter: 'queue',
+  filter: 'all',
   expandedId: null,
   popupPlacement: null,
   reviewer: '',
@@ -102,22 +104,21 @@ const plural = (count, noun) => `${count} ${noun}${count === 1 ? '' : 's'}`;
 
 const findItem = (id) => state.items.find((item) => item.case.case_id === id);
 
-// The review queue is what the automation sent to human review. Everything else stays
-// one filter away, so any recommendation can be opened and checked.
-// Closed claims are history, not work, so they sit in their own filter.
+// Claims review lists only open claims that wait for a person: sent to human review or to recheck after a
+// policy change, and not reviewed yet. Everything else is on All claims, where any claim can still be checked.
 const isClosed = (item) => item.case.case_status === 'closed';
+const todoItems = () => state.items.filter((item) => !isClosed(item) && !item.review
+  && (item.automated.recommendation === 'human_review' || item.needs_recheck));
 const reviewItems = () => state.items.filter((item) => !isClosed(item) && item.automated.recommendation === 'human_review');
 const routedItems = () => state.items.filter((item) => !isClosed(item) && item.automated.recommendation !== 'human_review');
 const closedItems = () => state.items.filter(isClosed);
 
 function visibleItems() {
-  if (state.filter === 'recheck') return state.items.filter((item) => item.needs_recheck);
+  if (state.pageId === 'claims') return todoItems();
+  if (state.filter === 'reviewed') return state.items.filter((item) => item.review);
   if (state.filter === 'routed') return routedItems();
   if (state.filter === 'closed') return closedItems();
-  const items = reviewItems();
-  if (state.filter === 'todo') return items.filter((item) => !item.review);
-  if (state.filter === 'done') return items.filter((item) => item.review);
-  return items;
+  return state.items;
 }
 
 const reasonsFor = (item, decision) => {
@@ -173,7 +174,7 @@ function renderBento() {
   const changed = items.filter((item) => item.review?.outcome === 'changed').length;
   const recheck = state.items.filter((item) => item.needs_recheck).length;
   const pct = (part, whole) => (whole ? Math.round((part / whole) * 100) : 0);
-  const target = { routine_processing: 'data-filter="routed"', request_information: 'data-page="calls"', human_review: 'data-filter="queue"' };
+  const target = { routine_processing: 'data-filter="routed"', request_information: 'data-page="calls"', human_review: 'data-page="claims"' };
   return `<section class="bento" aria-label="Overview">
     <div class="card stat">
       <span class="card-label">Waiting for review</span>
@@ -197,16 +198,12 @@ function renderBento() {
 }
 
 function renderHead() {
-  const items = reviewItems();
-  const reviewed = items.filter((item) => item.review).length;
-  const changed = items.filter((item) => item.review?.outcome === 'changed').length;
-  const routed = routedItems().length;
-  const progress = [
-    items.length ? `${reviewed} of ${items.length} reviewed${changed ? `, ${changed} changed` : ''}` : '',
-    routed ? `${plural(routed, 'other case')} routed automatically` : '',
-  ].filter(Boolean).join('. ');
+  const todo = todoItems().length;
+  const progress = state.pageId === 'claims'
+    ? (todo ? `${plural(todo, 'claim')} to review` : '')
+    : `${plural(state.items.length, 'claim')}, ${state.items.filter((item) => item.review).length} reviewed`;
   return `<div class="page-head">
-    <h1>Claims review</h1>
+    <h1>${pageTitle()}</h1>
     <button type="button" class="link policy-link" data-page="policies">Current policy ${escapeHtml(state.policyVersion)}</button>
     <p class="progress">${progress}</p>
     <button type="button" class="button" data-import ${state.importing ? 'disabled' : ''}>${state.importing ? 'Importing' : 'Import CSV'}</button>
@@ -216,16 +213,14 @@ function renderHead() {
     <button type="button" class="link" data-dismiss>Dismiss</button></div>` : ''}`;
 }
 
+const pageTitle = () => (state.pageId === 'claims' ? 'Claims review' : 'All claims');
+
 function renderFilters() {
-  const items = reviewItems();
-  const reviewed = items.filter((item) => item.review).length;
   const filters = [
-    ...(state.items.some((item) => item.needs_recheck) ? [['recheck', 'Policy recheck', state.items.filter((item) => item.needs_recheck).length]] : []),
-    ['queue', 'Human review', items.length],
-    ['todo', 'To review', items.length - reviewed],
-    ['done', 'Reviewed', reviewed],
+    ['all', 'All', state.items.length],
+    ['reviewed', 'Reviewed', state.items.filter((item) => item.review).length],
     ['routed', 'Routed automatically', routedItems().length],
-    ...(closedItems().length ? [['closed', 'Closed', closedItems().length]] : []),
+    ['closed', 'Closed', closedItems().length],
   ];
   return `<div class="filters" role="group" aria-label="Filter claims">${filters.map(([key, label, count]) => (
     `<button type="button" data-filter="${key}" aria-pressed="${state.filter === key}">${label} <span class="count">${count}</span></button>`
@@ -366,15 +361,14 @@ function renderTable() {
     return `<div class="state"><strong>No claims yet</strong>Import a CSV to start reviewing.<br>
       <button type="button" class="button" data-import>Import CSV</button></div>`;
   }
-  if (!['routed', 'recheck', 'closed'].includes(state.filter) && !reviewItems().length) {
-    return '<div class="state"><strong>No cases need human review</strong>Every imported case was routed automatically.</div>';
+  if (!items.length && state.pageId === 'claims') {
+    return `<div class="state"><strong>Nothing to review</strong>
+      <button type="button" class="button" data-page="all">See all claims</button></div>`;
   }
   if (!items.length) {
     const message = {
-      recheck: 'No claims need a policy recheck.',
-      todo: 'Everything has been reviewed.',
-      done: 'Nothing reviewed yet.',
-      routed: 'Every imported case is in human review.',
+      reviewed: 'Nothing reviewed yet.',
+      routed: 'No claims were routed automatically.',
       closed: 'No closed claims.',
     }[state.filter];
     return `<div class="state"><strong>${message}</strong></div>`;
@@ -395,12 +389,12 @@ function renderTable() {
 
 function renderClaims() {
   if (state.status === 'loading') {
-    dom.page.innerHTML = `<div class="page-head"><h1>Claims review</h1></div>
+    dom.page.innerHTML = `<div class="page-head"><h1>${pageTitle()}</h1></div>
       <div aria-label="Loading claims">${'<div class="skeleton"></div>'.repeat(8)}</div>`;
     return;
   }
   if (state.status === 'failed') {
-    dom.page.innerHTML = `<div class="page-head"><h1>Claims review</h1></div>
+    dom.page.innerHTML = `<div class="page-head"><h1>${pageTitle()}</h1></div>
       <div class="state"><strong>Claims could not be loaded</strong>Check that the server is running with npm start, then try again.<br>
       <button type="button" class="button" data-retry>Try again</button></div>`;
     return;
@@ -408,8 +402,9 @@ function renderClaims() {
   const focusId = document.activeElement?.id;
   const focusedDecision = document.activeElement?.dataset.decision;
   const rows = visibleItems().length;
-  dom.page.innerHTML = renderHead() + (state.items.length ? renderBento() : '')
-    + `<section class="card table-card">${renderFilters()}${renderTable()}</section>`
+  const all = state.pageId === 'all';
+  dom.page.innerHTML = renderHead() + (all && state.items.length ? renderBento() : '')
+    + `<section class="card table-card">${all ? renderFilters() : ''}${renderTable()}</section>`
     + '<aside id="rule-tooltip" class="rule-tooltip" popover="manual" role="tooltip"></aside>'
     + (state.expandedId ? renderReviewPopup(findItem(state.expandedId)) : '');
   const popup = dom.page.querySelector('.review-popup');
@@ -1017,6 +1012,7 @@ document.addEventListener('click', (event) => {
     const { page, filter, toggle, decision, policyAction } = button.dataset;
     if (policyAction) policyActions[policyAction](button.dataset);
     else if (page) {
+      if (filter) state.filter = filter;
       goToPage(page);
       if (state.pageId === page) {
         const target = document.getElementById(button.dataset.helpSection ? `help-${button.dataset.helpSection}` : 'page');
@@ -1100,7 +1096,7 @@ const measurementUI = createMeasurementUI({ root: dom.page, active: () => state.
 const validationUI = createValidationUI({
   root: dom.page, active: () => state.pageId === 'validation', request: postJson, flush: flushDraft,
   onActivated: (data) => { state.openPolicy = data.current_version; applyPolicies(data); state.policyEditing = false; showToast(`${data.current_version} activated. Affected open claims are ready for review.`); },
-  onClaims: () => { state.pageId = 'claims'; state.filter = 'recheck'; start(); },
+  onClaims: () => { state.pageId = 'claims'; start(); },
   onPolicies: () => { state.policyEditing = true; goToPage('policies'); },
   onLabels: (policy) => { state.pageId = 'labels'; renderNav(); labelsUI.load(policy); },
 });
