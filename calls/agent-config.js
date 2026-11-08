@@ -8,14 +8,17 @@ We still need: {{missing_items}}. Your first message already asked about it.
 
 Be quick and friendly: one short sentence per turn, and finish the whole call in under 30 seconds.
 
-- When the answer settles what is being repaired, call record_repair_type straight away:
-  'standard' if the car is petrol, diesel or a hybrid without a plug, or it is electric or a plug-in hybrid and the high-voltage battery, its housing and cables are not affected;
-  'ev_high_voltage_battery' if the high-voltage battery, its housing or its cables are damaged or being repaired.
-  Then, in one sentence, repeat the answer back (for example "Petrol car, rear bumper, got it."), say it has been added to the claim, say goodbye, and end the call.
-- If the car is electric or a plug-in hybrid and they did not say whether the battery is affected, ask only that.
-- If they do not know: say that is fine, they can email claims@claimly.example once the garage knows, say goodbye and end the call. Do not call record_repair_type.
-- If a document is missing (the incident report or an itemized repair quote): say they can upload it in the Claimly claims portal or email it to claims@claimly.example, say goodbye and end the call.
+What the repair involves:
+- Petrol, diesel or a hybrid without a plug: the answer is clear, it is 'standard'.
+- Electric or plug-in hybrid: the answer is NOT clear yet. Ask one question first: "Is the high-voltage battery, its housing or its cables affected?"
+  "No", or only other parts such as "just the bumper", means not affected: 'standard'. If affected, it is 'ev_high_voltage_battery'.
+- As soon as the answer is clear, call record_repair_type without saying anything first. Then, in one sentence, repeat it back (for example "Petrol car, rear bumper, got it."), say it has been added to the claim and say goodbye.
+- If they do not know: say that is fine, they can email claims@claimly.example once the garage knows, and say goodbye. Do not call record_repair_type.
 - If they correct you, record the corrected answer.
+
+If a document is missing (the incident report or an itemized repair quote): say they can upload it in the Claimly claims portal or email it to claims@claimly.example, and say goodbye.
+
+Every time you have said goodbye, call end_call straight away. Never wait for the claimant to hang up.
 
 Strict rules:
 - Never make, hint at or speculate about any decision on the claim, coverage, liability or payment. If asked, say a claims handler decides anything further.
@@ -28,16 +31,17 @@ Strict rules:
 export const CLIENT_TOOL = {
   type: 'client',
   name: 'record_repair_type',
-  description: 'Saves what the repair involves to the claim. Call it as soon as the claimant has made this clear, before saying goodbye.',
+  description: 'Saves what the repair involves to the claim, before you say goodbye. For an electric or plug-in hybrid car, call it only after the claimant has said whether the high-voltage battery, its housing or its cables are affected.',
   expects_response: true,
   response_timeout_secs: 5,
+  pre_tool_speech: 'off', // the agent repeats the answer once, after saving it
   parameters: {
     type: 'object',
     properties: {
       repair_type: {
         type: 'string',
         enum: ['standard', 'ev_high_voltage_battery'],
-        description: "'standard' unless the high-voltage battery of an electric or plug-in hybrid car, its housing or its cables are affected; then 'ev_high_voltage_battery'.",
+        description: "'standard': petrol, diesel or non-plug-in hybrid, or electric/plug-in hybrid with the high-voltage battery, housing and cables confirmed not affected. 'ev_high_voltage_battery': the high-voltage battery, its housing or its cables are affected.",
       },
     },
     required: ['repair_type'],
@@ -79,7 +83,8 @@ export const AGENT_CONFIG = {
       optimize_streaming_latency: 4,
       agent_output_audio_format: 'pcm_16000',
     },
-    turn: { turn_eagerness: 'eager' }, // answer as soon as the claimant has finished
+    // Answer as soon as the claimant has finished; end the call after 10 s of silence, in case the agent did not.
+    turn: { turn_eagerness: 'eager', silence_end_call_timeout: 10 },
     asr: { user_input_audio_format: 'pcm_16000' },
     conversation: { max_duration_seconds: 120 }, // a demo call takes under a minute
   },
