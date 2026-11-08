@@ -3,7 +3,8 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import { readText } from '../body.js';
 
 // A shared access code for when the app is reachable from outside (a tunnel or a deploy).
-// Off unless ACCESS_CODE is set. Entering the code once sets a cookie; everything else needs it.
+// Off unless ACCESS_CODE is set. Entering the code once sets a cookie; everything else needs it,
+// except the claimant's reply form (calls/email.js), where the token in the link is the key.
 
 const COOKIE = 'access';
 const MAX_AGE_SECS = 12 * 60 * 60;
@@ -60,7 +61,7 @@ export function accessGate(code) {
 
   return async (request) => {
     const url = new URL(request.url);
-    if (hasAccess(request.headers.get('cookie'), code)) return null;
+    if (url.pathname.startsWith('/reply/') || hasAccess(request.headers.get('cookie'), code)) return null;
 
     if (request.method === 'POST' && url.pathname === '/access') {
       const now = Date.now();

@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { accessGate } from './calls/access.js';
 import { readEnv } from './env.js';
 import { createApp } from './handler.js';
-import { fileImports } from './storage.js';
+import { fileDocuments, fileImports } from './storage.js';
 import { hash } from './validation.js';
 
 // Runs the app on Node with files under data/. The routes live in handler.js, which
@@ -35,6 +35,7 @@ const STATIC_FILES = {
 const app = createApp({
   baseCases: existsSync(casesPath) ? readFileSync(casesPath, 'utf8') : null,
   imports: fileImports(dataPath('imports', 'IMPORTS_DIR')),
+  documents: fileDocuments(dataPath('documents', 'DOCUMENTS_DIR')),
   logs: {
     reviews: dataPath('reviews.jsonl', 'REVIEWS_PATH'),
     policies: dataPath('policies.jsonl', 'POLICIES_PATH'),

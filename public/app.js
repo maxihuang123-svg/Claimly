@@ -741,11 +741,12 @@ function saveChange() {
   save(item, draft.decision, draft.reason, draft.note);
 }
 
-function importSummary({ added, updated, unchanged, needs_review_again: again }) {
+function importSummary({ added, updated, unchanged, needs_review_again: again, emailed }) {
   const parts = [];
   if (added) parts.push(`${added} added`);
   if (updated) parts.push(`${updated} updated`);
   if (unchanged) parts.push(`${unchanged} unchanged`);
+  if (emailed) parts.push(`${plural(emailed, 'claimant')} emailed for missing information`);
   const text = `Import finished: ${parts.join(', ')}`;
   return again ? `${text}. ${plural(again, 'case')} need review again.` : `${text}.`;
 }

@@ -19,16 +19,23 @@ const ASK_BLANK = {
   evidence_conflict: 'clarification of the photos and dates',
 };
 
-export function missingItems(item) {
+// The claim fields behind what is missing, for example ['repair_type'] or ['incident_report_present'].
+export function missingFields(item) {
   // Policies are versioned, so the rule is found by its outcome, not its number.
   const rule = item.automated.rules.find((entry) => entry.outcome === 'request_information');
   if (!rule) return [];
-  const asks = rule.checks.filter((check) => check.state === 'trigger').flatMap((check) => (
+  const fields = rule.checks.filter((check) => check.state === 'trigger').flatMap((check) => (
     check.field === 'other_fields'
-      ? Object.keys(ASK_BLANK).filter((field) => item.case[field] === null).map((field) => ASK_BLANK[field])
-      : [ASK[check.field] ?? ASK_BLANK[check.field]]
+      ? Object.keys(ASK_BLANK).filter((field) => item.case[field] === null)
+      : [check.field]
   ));
-  return [...new Set(asks.filter(Boolean))];
+  return [...new Set(fields.filter((field) => ASK[field] ?? ASK_BLANK[field]))];
+}
+
+export const askFor = (field) => ASK[field] ?? ASK_BLANK[field];
+
+export function missingItems(item) {
+  return [...new Set(missingFields(item).map(askFor))];
 }
 
 // Calls are only for open claims the policy sent to request information.

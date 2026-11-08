@@ -33,3 +33,14 @@ export function fileImports(dir) {
     },
   };
 }
+
+// Documents claimants uploaded (calls/email.js). A store is { save(id, bytes), read(id) }; read returns null when unknown.
+export function fileDocuments(dir) {
+  return {
+    read: (id) => (/^[\w-]+$/.test(id) && existsSync(join(dir, id)) ? new Uint8Array(readFileSync(join(dir, id))) : null),
+    save(id, bytes) {
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, id), bytes, { flag: 'wx' });
+    },
+  };
+}

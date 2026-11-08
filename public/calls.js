@@ -1,5 +1,5 @@
-// "Missing information" page: open claims the policy sent to request information, and the callback
-// assistant that asks the claimant for exactly what is missing. Mounted by one entry in PAGES (app.js).
+// "Missing information" page: open claims the policy sent to request information, and the two ways of asking
+// the claimant for exactly what is missing: the callback assistant, and an email with a short form (calls/email.js). Mounted by one entry in PAGES (app.js).
 // What a claimant says is shown as an unconfirmed note. It never changes the case or its review.
 
 import { canCall, joinList, missingItems } from './missing.js';
@@ -32,7 +32,8 @@ const OUTCOME_NAMES = {
   request_information: 'Request information',
   human_review: 'Human review',
 };
-const FIELD_NAMES = { repair_type: 'Repair type' };
+const FIELD_NAMES = { repair_type: 'Repair type', incident_report_present: 'Incident report', itemized_quote_present: 'Itemized quote' };
+const NOTE_LABELS = { repair_description: 'Repair, in their words' };
 
 export const callsIcon = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
   + '<path d="M5.5 2.5h-2a1 1 0 0 0-1 1C2.5 9 7 13.5 12.5 13.5a1 1 0 0 0 1-1v-2l-2.5-1-1.2 1.2A6 6 0 0 1 5.3 6.2L6.5 5z"/></svg>';
@@ -45,6 +46,7 @@ const state = {
   expandedId: null,
   error: null,
   session: null, // the browser call ringing or in progress: { caseId, contactId, conversation, hungUp }
+  sending: null, // case id while its email is being sent
   pollFailed: new Map(), // contact id -> message, polling stops for that contact until "Check again"
 };
 
@@ -220,6 +222,20 @@ async function connect(session, client, screen) {
   }
 }
 
+async function sendEmail(caseId) {
+  state.error = null;
+  state.sending = caseId;
+  refresh();
+  try {
+    putContact((await api('/api/emails', { case_id: caseId })).contact);
+  } catch (error) {
+    state.error = error.message;
+    await load(); // a failed send is still recorded, with its error
+  }
+  state.sending = null;
+  refresh();
+}
+
 function checkAgain(contactId) {
   state.pollFailed.delete(contactId);
   refresh();
@@ -234,8 +250,16 @@ function toggleRow(caseId) {
 
 /* Rendering */
 
+const isEmail = (contact) => contact.channel === 'email';
+
 function contactStatus(contact) {
   if (contact.error) return ['failed', 'Failed'];
+  if (isEmail(contact)) {
+    if (contact.applied) return ['done', 'Claim updated'];
+    if (contact.reply) return ['done', 'Answered'];
+    if (Date.now() > Date.parse(contact.expires_at)) return ['warn', 'Link expired'];
+    return ['active', 'Email sent'];
+  }
   if (state.session?.contactId === contact.id) return ['active', 'In call'];
   if (contact.applied) return ['done', 'Claim updated'];
   const status = contact.result?.status;
@@ -261,18 +285,45 @@ function renderAnswer(value) {
 }
 
 // The moment the demo is about: the answer filled the gap and the rules ran again.
-function renderApplied(applied) {
+function renderApplied(applied, source) {
   if (!applied) return '';
   const changes = Object.entries(applied.changes)
-    .map(([field, value]) => `${FIELD_NAMES[field] ?? field}: ${VALUE_LABELS[value] ?? value}`).join(', ');
+    .map(([field, value]) => `${FIELD_NAMES[field] ?? field}: ${value === true ? 'Received' : VALUE_LABELS[value] ?? value}`).join(', ');
   return `<div class="call-applied">
-    <p><strong>Claim updated from this call.</strong> ${escapeHtml(changes)}.</p>
+    <p><strong>Claim updated from this ${source}.</strong> ${escapeHtml(changes)}.</p>
     <p>Rules re-run under policy ${escapeHtml(applied.after.policy_version)}:
       ${escapeHtml(OUTCOME_NAMES[applied.before.recommendation])} → <strong>${escapeHtml(OUTCOME_NAMES[applied.after.recommendation])}</strong></p>
   </div>`;
 }
 
+// What the claimant answered on the form. Documents open from here; notes are for a person to check.
+function renderReply(reply) {
+  if (!reply) return '';
+  const rows = [
+    ...Object.entries(reply.answers).map(([field, value]) => [FIELD_NAMES[field] ?? field, renderAnswer(value)]),
+    ...reply.documents.map((doc) => [FIELD_NAMES[doc.field] ?? doc.field,
+      `<a href="/api/documents?id=${encodeURIComponent(doc.id)}" target="_blank" rel="noopener">${escapeHtml(doc.name)}</a>`]),
+    ...Object.entries(reply.notes).map(([field, text]) => [NOTE_LABELS[field] ?? FIELD_NAMES[field] ?? field, escapeHtml(text)]),
+  ];
+  return `<p class="call-caption">Claimant answered ${escapeHtml(formatTime(reply.at))}. A chosen repair type or an uploaded document updates the claim; text is a note for a person.</p>
+    <table class="call-answers"><tbody>${rows.map(([label, value]) => `<tr><th scope="row">${escapeHtml(label)}</th><td>${value}</td></tr>`).join('')}</tbody></table>`;
+}
+
+function renderEmail(contact) {
+  const waiting = !contact.reply && !contact.error && contactStatus(contact)[1] === 'Email sent';
+  return `<li class="contact">
+    <p class="contact-head">${renderStatus(contact)}<span>Email, ${escapeHtml(formatTime(contact.created_at))}</span>
+      <span>by ${escapeHtml(contact.initiated_by)}</span></p>
+    <p class="notice">Sent to ${escapeHtml(contact.to)}, asking for ${escapeHtml(joinList(contact.missing_items))}. Policy ${escapeHtml(contact.policy_version)}, ${escapeHtml(contact.rule_id)}.</p>
+    ${contact.error ? `<p class="error">${escapeHtml(contact.error)}</p>` : ''}
+    ${renderApplied(contact.applied, 'email')}
+    ${renderReply(contact.reply)}
+    ${waiting ? `<p class="notice"><a href="/reply/${encodeURIComponent(contact.token)}" target="_blank" rel="noopener">Open the claimant's form</a></p>` : ''}
+  </li>`;
+}
+
 function renderContact(contact) {
+  if (isEmail(contact)) return renderEmail(contact);
   const result = contact.result;
   const failed = state.pollFailed.get(contact.id);
   const answers = result && Object.keys(result.data).length ? `
@@ -292,7 +343,7 @@ function renderContact(contact) {
     <p class="notice">Asked for ${escapeHtml(joinList(contact.missing_items))}. Policy ${escapeHtml(contact.policy_version)}, ${escapeHtml(contact.rule_id)}.</p>
     ${contact.error ? `<p class="error">${escapeHtml(contact.error)}</p>` : ''}
     ${failed ? `<p class="error">${escapeHtml(failed)} <button type="button" class="link" data-call-check="${contact.id}">Check again</button></p>` : ''}
-    ${renderApplied(contact.applied)}
+    ${renderApplied(contact.applied, 'call')}
     ${result?.summary ? `<p>${escapeHtml(result.summary)}</p>` : ''}
     ${answers}
     ${typeof newInfo === 'string' && newInfo.trim() ? '<p class="call-flag">The claimant mentioned new information. Verify it before any fact on the claim changes.</p>' : ''}
@@ -314,6 +365,10 @@ function renderDialer(item) {
       <button type="button" class="save" data-call-browser="${id}" ${state.session ? 'disabled' : ''}>Incoming call</button>
       <span class="notice">This device rings like a phone. Answer it as the claimant.</span>
     </div>
+    <div class="call-line">
+      <button type="button" class="button" data-call-email="${id}" ${state.sending ? 'disabled' : ''}>${state.sending === item.case.case_id ? 'Sending…' : 'Send email'}</button>
+      <span class="notice">A link to a short form that asks only for what is missing.</span>
+    </div>
     ${state.error ? `<p class="error" role="alert">${escapeHtml(state.error)}</p>` : ''}`;
 }
 
@@ -333,7 +388,7 @@ function renderRow(item) {
     <section class="call-dialer" aria-label="Call the claimant">${renderDialer(item)}</section>
     <section aria-label="Contact history">
       <h2 class="field-label">Contact history</h2>
-      ${history.length ? `<ol class="contacts">${history.map(renderContact).join('')}</ol>` : '<p class="notice">No calls yet.</p>'}
+      ${history.length ? `<ol class="contacts">${history.map(renderContact).join('')}</ol>` : '<p class="notice">No contact yet.</p>'}
     </section>
   </div></td></tr>` : ''}`;
 }
@@ -394,9 +449,10 @@ document.addEventListener('click', (event) => {
   if (!context?.container.querySelector('[data-calls-page]')) return;
   const button = event.target.closest('button');
   if (button) {
-    const { callToggle, callBrowser: browserId, callCheck } = button.dataset;
+    const { callToggle, callBrowser: browserId, callEmail, callCheck } = button.dataset;
     if (callToggle) toggleRow(callToggle);
     else if (browserId) ringBrowser(browserId);
+    else if (callEmail) sendEmail(callEmail);
     else if (callCheck) checkAgain(callCheck);
     else if ('callReload' in button.dataset) load();
     return;

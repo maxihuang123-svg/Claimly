@@ -1,3 +1,4 @@
+import { Buffer } from 'node:buffer';
 import { DurableObject } from 'cloudflare:workers';
 import { accessGate } from '../calls/access.js';
 import { createApp } from '../handler.js';
@@ -5,7 +6,7 @@ import { examplesFrom } from '../validation.js';
 import { ENGINE_VERSION, EXAMPLES_CSV } from './generated.js';
 
 // Cloudflare entry. The Worker checks the access code, serves public/ as static assets and
-// sends /api/* to one Durable Object. That object holds the app exactly as server.js does on
+// sends /api/* and the claimants' reply forms (/reply/*) to one Durable Object. That object holds the app exactly as server.js does on
 // Node: it replays every log into memory once, then appends. Its SQLite storage replaces the
 // files under data/, and because it is a single instance, reads and writes stay consistent.
 
@@ -26,6 +27,17 @@ function sqlLog(sql, name) {
         at = end;
       }
     },
+  };
+}
+
+// Documents claimants uploaded, as base64 text under "document:<id>".
+function sqlDocuments(sql) {
+  return {
+    read(id) {
+      const text = sqlLog(sql, `document:${id}`).read();
+      return text ? new Uint8Array(Buffer.from(text, 'base64')) : null;
+    },
+    save: (id, bytes) => sqlLog(sql, `document:${id}`).append(Buffer.from(bytes).toString('base64')),
   };
 }
 
@@ -50,6 +62,7 @@ export class Claims extends DurableObject {
     sql.exec('CREATE INDEX IF NOT EXISTS lines_by_log ON lines (log, id)');
     this.app = createApp({
       imports: sqlImports(sql),
+      documents: sqlDocuments(sql),
       logs: Object.fromEntries(['reviews', 'policies', 'validation', 'outcomes', 'contacts'].map((name) => [name, sqlLog(sql, name)])),
       engineVersion: ENGINE_VERSION,
       examples: examplesFrom(EXAMPLES_CSV),
@@ -79,6 +92,6 @@ export default {
     gate ??= accessGate(env.ACCESS_CODE);
     const denied = await gate(request);
     if (denied) return denied;
-    return pathname.startsWith('/api/') ? app() : env.ASSETS.fetch(request);
+    return pathname.startsWith('/api/') || pathname.startsWith('/reply/') ? app() : env.ASSETS.fetch(request);
   },
 };

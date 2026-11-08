@@ -4,7 +4,11 @@
 export class TooLarge extends Error {}
 
 export async function readText(request, limit) {
-  if (!request.body) return '';
+  return new TextDecoder().decode(await readBytes(request, limit));
+}
+
+export async function readBytes(request, limit) {
+  if (!request.body) return new Uint8Array();
   if (Number(request.headers.get('content-length')) > limit) throw new TooLarge();
   const reader = request.body.getReader();
   const chunks = [];
@@ -25,5 +29,5 @@ export async function readText(request, limit) {
     bytes.set(chunk, at);
     at += chunk.byteLength;
   }
-  return new TextDecoder().decode(bytes);
+  return bytes;
 }

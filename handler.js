@@ -1,6 +1,7 @@
 import { readText, TooLarge } from './body.js';
 import { createCallApi } from './calls/api.js';
 import { ContactLog } from './calls/contacts.js';
+import { createEmailApi } from './calls/email.js';
 import { CaseFileError, parseCaseFile, REQUIRED_COLUMNS, reviewStillApplies } from './cases.js';
 import { evaluate, RECOMMENDATIONS } from './engine.js';
 import { OutcomeStore, measurementPayload } from './measurement.js';
@@ -21,8 +22,8 @@ export const MAX_CSV_BYTES = 5 * 1024 * 1024;
 // The whole API as one web handler, Request in and Response out. server.js runs it on
 // Node with files, and worker/index.js runs it in a Durable Object on Cloudflare.
 // logs: { reviews, policies, validation, outcomes, contacts }, each a path or a log (storage.js).
-// imports: uploaded case files (storage.js). baseCases: CSV text loaded before them, if any.
-export function createApp({ logs, imports, baseCases = null, engineVersion, examples, env = {}, fetch }) {
+// imports: uploaded case files, documents: files claimants uploaded (storage.js). baseCases: CSV text loaded before them, if any.
+export function createApp({ logs, imports, documents = null, baseCases = null, engineVersion, examples, env = {}, fetch }) {
   const items = new Map();
   const log = new ReviewLog(logs.reviews);
   const policies = new PolicyStore(logs.policies);
@@ -135,7 +136,7 @@ export function createApp({ logs, imports, baseCases = null, engineVersion, exam
       imports.save(`${lastImportAt}.${policy.version}.csv`, text);
       for (const item of changes) items.set(item.case.case_id, item);
     }
-    return summary;
+    return { summary, changed: changes.map((item) => item.case.case_id) };
   }
 
   // A correction from a claimant call goes in like any upload: a one-row file, evaluated under the
@@ -173,10 +174,11 @@ export function createApp({ logs, imports, baseCases = null, engineVersion, exam
     return item;
   }
 
-  const calls = createCallApi({
-    env, fetch, contacts: new ContactLog(logs.contacts), updateCase,
-    findItem: (caseId) => (items.has(caseId) ? withReview(items.get(caseId)) : null),
-  });
+  // Calls and emails share one contact log, so a claim's history shows both.
+  const contacts = new ContactLog(logs.contacts);
+  const currentItem = (caseId) => (items.has(caseId) ? withReview(items.get(caseId)) : null);
+  const calls = createCallApi({ env, fetch, contacts, updateCase, findItem: currentItem });
+  const email = createEmailApi({ env, fetch, contacts, documents, updateCase, findItem: currentItem });
 
   async function route(request) {
     const url = new URL(request.url);
@@ -197,8 +199,9 @@ export function createApp({ logs, imports, baseCases = null, engineVersion, exam
     }
     if (key === 'GET /api/cases') return json(casesPayload());
     if (key === 'POST /api/import') {
-      const summary = importCases(await readBody(request, MAX_CSV_BYTES));
-      return json({ summary, ...casesPayload() });
+      const { summary, changed } = importCases(await readBody(request, MAX_CSV_BYTES));
+      const emailed = (await email.sendAfterImport(changed, url.origin)).filter((contact) => !contact.error).length;
+      return json({ summary: { ...summary, emailed }, ...casesPayload() });
     }
     if (key === 'POST /api/reviews') {
       const body = await readJson(request);
@@ -255,7 +258,7 @@ export function createApp({ logs, imports, baseCases = null, engineVersion, exam
       validation.saveLabels(candidate, body.expected);
       return json(validation.labelSetup(candidate), 201);
     }
-    return (await calls(request)) ?? json({ error: 'Not found.' }, 404);
+    return (await calls(request)) ?? (await email.handle(request)) ?? json({ error: 'Not found.' }, 404);
   }
 
   loadCases();

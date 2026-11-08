@@ -11,3 +11,4 @@ node_modules/
 .wrangler/
 worker/generated.js
 .dev.vars
+data/documents/
