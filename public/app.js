@@ -3,6 +3,7 @@ import { createValidationUI } from './validation.js';
 import { createLabelsUI } from './labels.js';
 import { callsIcon, renderCalls } from './calls.js';
 import { helpIcon, pageHint, renderHelp } from './help.js';
+import { startTour } from './tour.js';
 
 const OUTCOMES = {
   routine_processing: { name: 'Routine processing', action: 'Send to routine processing.' },
@@ -1007,6 +1008,10 @@ document.addEventListener('keydown', (event) => {
 
 document.addEventListener('click', (event) => {
   const button = event.target.closest('button');
+  if (button && 'tourStart' in button.dataset) {
+    startTour({ goToPage, currentPage: () => state.pageId });
+    return;
+  }
   if (button) {
     const { page, filter, toggle, decision, policyAction } = button.dataset;
     if (policyAction) policyActions[policyAction](button.dataset);

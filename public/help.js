@@ -73,7 +73,7 @@ export function renderHelp({ container, outcomes, reasons, policyVersion, counts
     : 'Send it to the person who set up Claimly for your team.';
 
   container.innerHTML = `<div class="help">
-    <div class="page-head"><h1>Help</h1></div>
+    <div class="page-head"><h1>Help</h1><button type="button" class="button" data-tour-start>Start tutorial</button></div>
     <p class="help-lead">Claimly checks every claim against your written policy (currently <strong>${escapeHtml(policyVersion ?? '…')}</strong>) and suggests one of three next steps. A person makes the call wherever it matters, and every decision is recorded.</p>
 
     <nav class="help-toc" aria-label="On this page"><ul>

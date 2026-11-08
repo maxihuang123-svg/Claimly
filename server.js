@@ -31,6 +31,8 @@ const STATIC_FILES = {
   '/phone.js': ['phone.js', 'text/javascript; charset=utf-8'],
   '/missing.js': ['missing.js', 'text/javascript; charset=utf-8'],
   '/help.js': ['help.js', 'text/javascript; charset=utf-8'],
+  '/tour.js': ['tour.js', 'text/javascript; charset=utf-8'],
+  '/tour.css': ['tour.css', 'text/css; charset=utf-8'],
 };
 
 const app = createApp({

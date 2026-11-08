@@ -1,0 +1,49 @@
+/* Guided tour (tour.js). Built on the tokens in styles.css. */
+
+.tour { position: fixed; inset: 0; z-index: 90; pointer-events: none; }
+/* The ring's huge shadow dims everything except the highlighted control. */
+.tour-ring {
+  position: fixed;
+  border-radius: var(--radius);
+  box-shadow: 0 0 0 3px var(--surface), 0 0 0 9999px rgb(13 15 20 / 0.5);
+  transition: left 0.25s ease, top 0.25s ease, width 0.25s ease, height 0.25s ease;
+}
+.tour-card {
+  position: fixed;
+  display: grid;
+  gap: 8px;
+  width: min(320px, calc(100vw - 24px));
+  padding: 16px;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+  pointer-events: auto;
+  transition: left 0.25s ease, top 0.25s ease;
+}
+.tour-card h2 { font-size: 16px; font-weight: 650; }
+.tour-card p { color: var(--ink-2); font-size: 14px; line-height: 1.45; }
+.tour-card .tour-count { color: var(--ink-3); font-size: 12px; font-weight: 600; }
+.tour-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 4px; }
+.tour-actions span { display: flex; gap: 8px; }
+.tour-actions .save { width: auto; }
+
+.tour-foot { margin-top: auto; padding-top: 10px; }
+.tour-start {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: var(--radius);
+  color: var(--ink-2);
+  font-weight: 500;
+}
+.tour-start:hover { background: rgb(13 15 20 / 0.045); color: var(--ink); }
+.tour-start svg { width: 16px; height: 16px; color: var(--ink-3); }
+
+@media (max-width: 720px) {
+  .tour-foot { display: none; } /* phones start it from Help */
+}
+@media (prefers-reduced-motion: reduce) {
+  .tour-ring, .tour-card { transition: none; }
+}
