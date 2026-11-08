@@ -21,7 +21,7 @@ export function hasAccess(cookieHeader, code) {
 
 const page = (error) => `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Claims review</title><link rel="icon" href="data:,">
+<title>Claimly</title><link rel="icon" href="data:,">
 <style>
   body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #f7f7f8; color: #14181d;
     font: 16px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
@@ -32,7 +32,7 @@ const page = (error) => `<!doctype html>
   p { margin: 0; color: #a4262c; font-size: 14px; font-weight: 550; }
 </style></head>
 <body><form method="post" action="/access">
-  <h1>Claims review</h1>
+  <h1>Claimly</h1>
   <label for="code">Access code</label>
   <input id="code" name="code" inputmode="numeric" autocomplete="one-time-code" autofocus required>
   ${error ? `<p role="alert">${error}</p>` : ''}

@@ -30,6 +30,7 @@ const STATIC_FILES = {
   '/ringtone.mp3': ['ringtone.mp3', 'audio/mpeg'],
   '/phone.js': ['phone.js', 'text/javascript; charset=utf-8'],
   '/missing.js': ['missing.js', 'text/javascript; charset=utf-8'],
+  '/help.js': ['help.js', 'text/javascript; charset=utf-8'],
 };
 
 const app = createApp({
@@ -88,7 +89,7 @@ createServer((request, response) => {
     response.end(JSON.stringify({ error: 'The server could not complete that request.' }));
   });
 }).listen(port, '127.0.0.1', () => {
-  console.log(`Claims review: http://localhost:${port}`);
+  console.log(`Claimly: http://localhost:${port}`);
   console.log(`${app.items.size} cases loaded`);
   console.log(`Current policy: ${app.policies.current.version}`);
 });
