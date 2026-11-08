@@ -1,4 +1,3 @@
-import { pageHint } from './help.js';
 
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const names = { routine_processing: 'Routine processing', request_information: 'Request information', human_review: 'Human review' };
@@ -21,7 +20,7 @@ export function createValidationUI({ root, active, request, flush, onActivated, 
     }
     const { preview, run, stale } = data;
     root.innerHTML = `<div class="validation-page">
-      <header class="validation-heading"><div><h1>Validation</h1><p>See what changes when your policy does.</p>${pageHint('validation', { short: true })}</div><span class="comparison-mode">${state.candidate === 'draft' ? 'Draft comparison' : 'Historical comparison'}</span></header>
+      <header class="validation-heading"><div><h1>Validation</h1><p>See what changes when your policy does.</p></div><span class="comparison-mode">${state.candidate === 'draft' ? 'Draft comparison' : 'Historical comparison'}</span></header>
       <section class="comparison-panel" aria-label="Choose policies to compare"><div class="validation-controls">
         ${field('validation-baseline', 'From', options(state.baseline, false))}
         <span class="comparison-arrow">${arrow}</span>
@@ -31,7 +30,7 @@ export function createValidationUI({ root, active, request, flush, onActivated, 
       ${state.error ? `<p class="validation-alert error" role="alert">${esc(state.error)}</p>` : ''}
       <section class="policy-change-note"><h2>Policy change</h2><div>${preview.changes.length ? `<ul class="rule-differences">${preview.changes.map((c) => `<li><strong>${c.kind}</strong><span>${esc(c.text)}</span><span class="notice">${names[c.outcome] ?? ''}</span></li>`).join('')}</ul>` : '<p>The decision rules are identical.</p>'}</div></section>
       ${labelSetup()}
-      ${run ? `${stale ? '<p class="validation-alert" role="status"><strong>This comparison is out of date.</strong> The policy, claim facts, or labels changed. Run it again before activation.</p>' : ''}${results(run)}${labelled(run)}${claims(run)}${release(run, stale)}` : `<section class="validation-empty"><span class="empty-comparison">${arrow}</span><h2>Understand the impact before you release</h2><p>Compare recommendations, see where claims move, and review the cases affected by your policy change.</p><p class="notice">Recorded decisions stay intact during comparison.</p></section>`}
+      ${run ? `${stale ? '<p class="validation-alert" role="status"><strong>This comparison is out of date.</strong> The policy, claim facts, or labels changed. Run it again before activation.</p>' : ''}${results(run)}${labelled(run)}${claims(run)}${release(run, stale)}` : `<section class="validation-empty"><span class="empty-comparison">${arrow}</span><h2>Understand the impact before you release</h2><p>Compare recommendations, see where claims move, and review the cases affected by your policy change.</p></section>`}
     </div>`;
   }
   function results(run) {
@@ -40,7 +39,7 @@ export function createValidationUI({ root, active, request, flush, onActivated, 
     return `<section class="impact-overview"><div class="section-heading"><div><h2>${impact.changed ? `${impact.changed} of ${impact.total} claims would move to a different next step` : 'The next steps stay the same'}</h2><p class="notice">${impact.unchanged} unchanged · ${impact.open_rechecks} open claims need another look</p></div><span class="run-stamp">${esc(time(run.created_at))}</span></div>
       <div class="impact-layout"><div class="outcome-distribution"><div class="distribution-header"><h3>Recommendations</h3><span>${esc(versionName(run.baseline.version))} / ${esc(versionName(run.candidate.version))}</span><span>Change</span></div>
         ${impact.outcomes.map((r) => `<div class="distribution-row" data-outcome="${r.outcome}"><div class="distribution-label"><span class="outcome-dot"></span>${names[r.outcome]}</div><div class="bar-comparison" aria-label="${names[r.outcome]}: ${r.before} before, ${r.after} after"><div class="bar-line before"><span style="width:${r.before / max * 100}%"></span><b>${r.before}</b></div><div class="bar-line after"><span style="width:${r.after / max * 100}%"></span><b>${r.after}</b></div></div><span class="outcome-delta ${r.delta ? 'has-change' : ''}">${r.delta > 0 ? '+' : ''}${r.delta || '—'}</span></div>`).join('')}
-        <p class="notice distribution-caption">Lighter bars show the baseline; solid bars show the proposed policy. All ${impact.total} claims are included, including closed-case simulations.</p>
+        <p class="notice distribution-caption">Lighter bars show the baseline; solid bars show the proposed policy.</p>
       </div><aside class="claim-movements"><h3>Where claims move</h3>${impact.transitions.length ? impact.transitions.map((t) => `<button class="movement" data-validation="transition" data-from="${t.from}" data-to="${t.to}" aria-pressed="${state.transition?.from === t.from && state.transition?.to === t.to}"><span class="movement-path">${pill(t.from)}<span class="movement-arrow">${arrow}</span>${pill(t.to)}</span><span class="movement-count">${t.count}<small>${t.count === 1 ? 'claim' : 'claims'}</small></span></button>`).join('') : '<p class="notice movement-empty">No claims change their next step.</p>'}<p class="notice">Select a movement to inspect its claims below.</p></aside></div>
       <details class="validation-details run-details"><summary>Comparison details</summary><p>Run ${esc(run.id)}<br>${run.claims.length} imported claims · Engine ${esc(run.engine_version.slice(0, 12))}<br>Both policies were evaluated against the same saved input facts. Closed decisions and reviewer history are retained.</p></details></section>`;
   }

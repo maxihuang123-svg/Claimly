@@ -2,7 +2,7 @@ import { createMeasurementUI } from './measurement.js';
 import { createValidationUI } from './validation.js';
 import { createLabelsUI } from './labels.js';
 import { callsIcon, renderCalls } from './calls.js';
-import { helpIcon, pageHint, renderHelp } from './help.js';
+import { helpIcon, renderHelp } from './help.js';
 
 const OUTCOMES = {
   routine_processing: { name: 'Routine processing', action: 'Send to routine processing.' },
@@ -211,7 +211,6 @@ function renderHead() {
     <button type="button" class="button" data-import ${state.importing ? 'disabled' : ''}>${state.importing ? 'Importing' : 'Import CSV'}</button>
     <input type="file" id="file" accept=".csv,text/csv" hidden>
   </div>
-  ${pageHint('claims')}
   ${state.banner ? `<div class="banner" role="alert"><span>${escapeHtml(state.banner)}</span>
     <button type="button" class="link" data-dismiss>Dismiss</button></div>` : ''}`;
 }
@@ -330,7 +329,7 @@ function renderAction(item) {
   const saving = state.busy.has(item.case.case_id);
   const error = state.error ? `<p class="error" role="alert">${escapeHtml(state.error)}</p>` : '';
   const closed = item.case.case_status === 'closed'
-    ? '<p class="notice">This claim is closed. Your review is recorded as feedback on the decision.</p>' : '';
+    ? '<p class="notice">This claim is closed.</p>' : '';
   if (item.review && !draft.changing) return `<div class="action">${renderReviewed(item)}${closed}</div>`;
 
   const recommended = item.automated.recommendation;
@@ -349,7 +348,6 @@ function renderAction(item) {
       </label>
     </div>
     ${error}${closed}
-    <p class="notice">Your name, reason and policy version are saved with the original recommendation.</p>
     <div class="review-footer">${buttons}</div>
   </div>`;
 }
@@ -448,9 +446,9 @@ function ruleStep(outcome, body) {
 function renderPolicyNotes() {
   return `<details class="policy-notes">
     <summary>How every policy works</summary>
-    <p>Rules apply in order. A known reason for human review takes priority over a missing document. Every recommendation records the policy version and rule that produced it.</p>
-    <p>Routine processing means the case may enter the insurer's normal downstream process. It does not mean payment is approved.</p>
-    <p>If an input field is absent or unreadable, no value is invented. Information is requested unless another known fact already requires human review. A blank is treated as an absent fact.</p>
+    <p>Rules apply in order. A known reason for human review takes priority over a missing document.</p>
+    <p>Routine processing means the case may enter the insurer's normal downstream process.</p>
+    <p>If an input field is absent or unreadable, no value is invented. Information is requested unless another known fact already requires human review.</p>
     <p>Case status is open or closed: open claims are still in process, closed claims have been completed. Claim type identifies the kind of claim. Repair type distinguishes standard repair from EV high-voltage battery work. Quote is the itemized repair estimate in euros. The remaining yes/no fields indicate whether evidence is present or a review trigger is known.</p>
   </details>`;
 }
@@ -533,7 +531,7 @@ function refreshDraftStatus() {
 function renderDraftPage() {
   dom.page.innerHTML = `<div class="page-head">
     <h1>Draft of ${nextVersion()}</h1>
-    <p class="progress">Based on ${escapeHtml(state.policyData.current_version)}. Changes save automatically.</p>
+    <p class="progress">Based on ${escapeHtml(state.policyData.current_version)}.</p>
     <button type="button" class="button" data-policy-action="back">Back to policies</button>
   </div>
   <div class="policy-grid">
@@ -570,7 +568,6 @@ function renderPolicies() {
     <h1>Policies</h1>
     <button type="button" class="button" data-policy-action="edit" ${state.policyBusy ? 'disabled' : ''}>${draft ? 'Continue draft' : 'Edit policy'}</button>
   </div>
-  ${pageHint('policies')}
   ${state.policyError ? `<div class="banner" role="alert"><span>${escapeHtml(state.policyError)}</span></div>` : ''}
   <div class="policy-grid">${renderPolicyDoc(open)}${renderVersions()}</div>`;
 }

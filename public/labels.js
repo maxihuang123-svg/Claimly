@@ -1,4 +1,3 @@
-import { pageHint } from './help.js';
 
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const names = { routine_processing: 'Routine processing', request_information: 'Request information', human_review: 'Human review' };
@@ -24,7 +23,7 @@ export function createLabelsUI({ root, active, request, flush, onValidation }) {
     const fromV1 = examples.filter((e) => state.expected[e.case_id] !== reference[e.case_id]).length;
     const options = `${state.data.draft ? `<option value="draft" ${state.policy === 'draft' ? 'selected' : ''}>Draft</option>` : ''}${state.data.policies.map((p) => `<option value="${p.version}" ${state.policy === p.version ? 'selected' : ''}>Policy ${p.version}${p.version === state.data.current_version ? ' · Current' : ''}</option>`).join('')}`;
     root.innerHTML = `<div class="validation-page labels-page">
-      <header class="validation-heading"><div><h1>Expected answers</h1><p>Choose the correct next step for each labelled example. Validation and Measurement score policies against these answers.</p>${pageHint('labels', { short: true })}</div></header>
+      <header class="validation-heading"><div><h1>Expected answers</h1><p>Choose the correct next step for each labelled example. Validation and Measurement score policies against these answers.</p></div></header>
       <section class="comparison-panel"><div class="validation-controls">
         <label class="field"><span>Answers for</span><select class="text-input" id="labels-policy" ${state.busy ? 'disabled' : ''}>${options}</select></label>
         <div class="labels-source" data-source="${esc(source)}"><span>Status</span><strong>${esc(sourceText(source))}</strong></div>
