@@ -1,4 +1,4 @@
-// Help page and the one-line hints at the top of every page.
+// Help page.
 // Everything the app already knows (reasons, outcomes, policy version, open work) is read live,
 // so the instructions stay true when the policy or the reason list changes.
 
@@ -10,25 +10,6 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => 
 const SUPPORT_CONTACT = 'support@claimly.example';
 
 export const helpIcon = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="6"/><path d="M6.3 6.2a1.8 1.8 0 0 1 3.5.6c0 1.2-1.8 1.5-1.8 2.6M8 11.6h.01"/></svg>';
-
-// One line under each page title: what the page is for, and where to read more.
-export const PAGE_HINTS = {
-  claims: { text: 'Claims the policy sends to a person wait under Human review. Open one with Review decision to confirm or correct its next step.', section: 'review', link: 'How to review a claim' },
-  calls: { text: 'Claims that need more information before a decision. When a missing fact arrives, the rules run again and the claim moves on.', section: 'missing', link: 'How this works' },
-  policies: { text: 'The written rules that decide every claim’s next step. Changes start as a draft and are checked in Validation before they are used.', section: 'policy', link: 'How policy changes work' },
-  measurement: { text: 'For rule owners: how well the policy decides, based on test examples and reviewer corrections.', section: 'quality', link: 'What this page shows' },
-  labels: { text: 'For rule owners: the correct answers for test examples, used to score every policy version.', section: 'quality', link: 'What this page shows' },
-  validation: { text: 'For rule owners: see which claims would change before a new policy is put into use.', section: 'policy', link: 'How policy changes work' },
-};
-
-// short: for pages whose title already carries a description, only say who it is for.
-export function pageHint(pageId, { short = false } = {}) {
-  const hint = PAGE_HINTS[pageId];
-  if (!hint) return '';
-  const text = short ? (hint.text.startsWith('For rule owners') ? 'For rule owners.' : '') : hint.text;
-  return `<p class="page-hint" data-page-hint>${escapeHtml(text)}
-    <button type="button" class="link" data-page="help" data-help-section="${hint.section}">${escapeHtml(hint.link)}</button></p>`;
-}
 
 // When to pick each correction reason. Codes the app doesn't know yet still show with their label.
 const REASON_GUIDE = {
@@ -108,8 +89,7 @@ export function renderHelp({ container, outcomes, reasons, policyVersion, counts
         <li><strong>Click Review decision</strong> and enter your name as Reviewer.</li>
         <li><strong>Decide.</strong> For a claim sent to ${pill('human_review')}, choose the next step it should take now, pick a reason and add a note if useful. Then <em>Save review</em>.</li>
         <li><strong>Spot-check the rest.</strong> Under <em>Routed automatically</em> you can open any claim and either confirm it or use <em>Change recommendation</em>.</li>
-      </ol>
-      <p class="help-note">Nothing is overwritten. Your name, reason and the policy version are saved next to the original recommendation. If you change your mind, use <em>Change decision</em>; the earlier entry stays in the claim’s review history.</p>`)}
+      </ol>`)}
 
     ${section('outcomes', 'The three next steps', `
       <dl class="help-outcomes">${outcomeCodes.map((code) => `<div><dt>${pill(code)}</dt><dd>${escapeHtml(OUTCOME_GUIDE[code] ?? '')}</dd></div>`).join('')}</dl>
@@ -130,8 +110,7 @@ export function renderHelp({ container, outcomes, reasons, policyVersion, counts
         <li><strong>Check the impact.</strong> <em>Review draft</em> opens Validation, which shows every claim whose next step would change, and how the draft scores on the test examples.</li>
         <li><strong>Activate.</strong> Once you are satisfied, enter your name under <em>Approved by</em> on Validation and click <em>Activate draft</em>.</li>
         <li><strong>Recheck.</strong> Open claims whose outcome changes appear under the <em>Policy recheck</em> filter on Claims review and need a review again.</li>
-      </ol>
-      <p class="help-note">Closed claims keep the policy they were decided under, so history never changes after the fact.</p>`)}
+      </ol>`)}
 
     ${section('quality', 'Quality pages', `
       <dl class="help-reasons">

@@ -30,6 +30,7 @@ const STATIC_FILES = {
   '/ringtone.mp3': ['ringtone.mp3', 'audio/mpeg'],
   '/phone.js': ['phone.js', 'text/javascript; charset=utf-8'],
   '/missing.js': ['missing.js', 'text/javascript; charset=utf-8'],
+  '/logo.png': ['logo.png', 'image/png'],
   '/help.js': ['help.js', 'text/javascript; charset=utf-8'],
   '/tour.js': ['tour.js', 'text/javascript; charset=utf-8'],
   '/tour.css': ['tour.css', 'text/css; charset=utf-8'],

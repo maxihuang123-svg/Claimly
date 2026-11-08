@@ -3,7 +3,6 @@
 // What a claimant says is shown as an unconfirmed note. It never changes the case or its review.
 
 import { canCall, joinList, missingItems } from './missing.js';
-import { pageHint } from './help.js';
 import { showIncomingCall } from './phone.js';
 
 const CLIENT_URL = 'https://esm.sh/@elevenlabs/client@1.35.0'; // loaded only when a browser call starts
@@ -316,7 +315,7 @@ function renderReply(reply) {
       `<a href="/api/documents?id=${encodeURIComponent(doc.id)}" target="_blank" rel="noopener">${escapeHtml(doc.name)}</a>`]),
     ...Object.entries(reply.notes).map(([field, text]) => [NOTE_LABELS[field] ?? FIELD_NAMES[field] ?? field, escapeHtml(text)]),
   ];
-  return `<p class="call-caption">Claimant answered ${escapeHtml(formatTime(reply.at))}. A chosen repair type or an uploaded document updates the claim; text is a note for a person.</p>
+  return `<p class="call-caption">Claimant answered ${escapeHtml(formatTime(reply.at))}.</p>
     <table class="call-answers"><tbody>${rows.map(([label, value]) => `<tr><th scope="row">${escapeHtml(label)}</th><td>${value}</td></tr>`).join('')}</tbody></table>`;
 }
 
@@ -338,7 +337,7 @@ function renderContact(contact) {
   const result = contact.result;
   const failed = state.pollFailed.get(contact.id);
   const answers = result && Object.keys(result.data).length ? `
-    <p class="call-caption">${contact.applied ? 'Claimant said. Only a clear repair type updates the claim; the rest are notes for a person.' : 'Claimant said (unconfirmed, does not change the claim)'}</p>
+    <p class="call-caption">${contact.applied ? 'Claimant said.' : 'Claimant said (unconfirmed).'}</p>
     <table class="call-answers"><tbody>${Object.entries(ANSWER_LABELS).map(([key, label]) => `
       <tr title="${escapeHtml(result.data[key]?.rationale)}"><th scope="row">${label}</th><td>${renderAnswer(result.data[key]?.value)}</td></tr>`).join('')}
     </tbody></table>` : '';
@@ -365,20 +364,18 @@ function renderContact(contact) {
 function renderDialer(item) {
   const id = escapeHtml(item.case.case_id);
   if (item.case.case_status !== 'open') {
-    return '<p class="notice">This claim is closed, so the assistant does not call. Earlier contacts are listed here.</p>';
+    return '<p class="notice">This claim is closed.</p>';
   }
   if (!canCall(item)) {
     return `<p class="notice">Nothing is missing any more. The claim is now in <strong>${escapeHtml(OUTCOME_NAMES[item.automated.recommendation])}</strong>.</p>`;
   }
-  return `<p>The assistant asks only for <strong>${escapeHtml(joinList(missingItems(item)))}</strong>.
-      It cannot decide, promise payment or change the claim.</p>
+  return `<p>The assistant asks only for <strong>${escapeHtml(joinList(missingItems(item)))}</strong>.</p>
     <div class="call-line">
       <button type="button" class="save" data-call-browser="${id}" ${state.session ? 'disabled' : ''}>Incoming call</button>
       <span class="notice">This device rings like a phone. Answer it as the claimant.</span>
     </div>
     <div class="call-line">
       <button type="button" class="button" data-call-email="${id}" ${state.sending ? 'disabled' : ''}>${state.sending === item.case.case_id ? 'Sending…' : 'Send email'}</button>
-      <span class="notice">A link to a short form that asks only for what is missing.</span>
     </div>
     ${state.error ? `<p class="error" role="alert">${escapeHtml(state.error)}</p>` : ''}`;
 }
@@ -438,7 +435,6 @@ function draw() {
 
   context.container.innerHTML = `<div data-calls-page>
     <div class="page-head"><h1>Missing information</h1><p class="progress">${progress}</p></div>
-    ${pageHint('calls')}
     ${renderBody()}
   </div>`;
 }
