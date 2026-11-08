@@ -84,7 +84,6 @@ export function renderHelp({ container, outcomes, reasons, policyVersion, counts
       <li><a href="#help-missing">Missing information</a></li>
       <li><a href="#help-policy">When the policy changes</a></li>
       <li><a href="#help-quality">Quality pages</a></li>
-      <li><a href="#help-keys">Keyboard shortcuts</a></li>
       <li><a href="#help-terms">Terms</a></li>
       <li><a href="#help-problems">Problems or questions</a></li>
     </ul></nav>
@@ -139,15 +138,6 @@ export function renderHelp({ container, outcomes, reasons, policyVersion, counts
         <div><dt>Expected answers</dt><dd>The agreed correct next step for each test example. When the rules change, rule owners confirm the answers for the new version.</dd></div>
         <div><dt>Validation</dt><dd>A simulation: which claims would move, and how test results change, before a draft is used. Recorded decisions stay untouched.</dd></div>
         <div><dt>Measurement</dt><dd>Decision quality on test examples, reviewer corrections and independently recorded outcomes. Test results are not the same as accuracy on real claims.</dd></div>
-      </dl>`)}
-
-    ${section('keys', 'Keyboard shortcuts', `
-      <dl class="help-reasons">
-        <div><dt><kbd>↑</kbd> <kbd>↓</kbd> or <kbd>J</kbd> <kbd>K</kbd></dt><dd>Move between claims on Claims review.</dd></div>
-        <div><dt><kbd>↵</kbd> or <kbd>O</kbd></dt><dd>Open the review for the highlighted claim.</dd></div>
-        <div><dt><kbd>Esc</kbd></dt><dd>Close the review without saving.</dd></div>
-        <div><dt><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> …</dt><dd>Switch between the filters above the table, counted from the left.</dd></div>
-        <div><dt><kbd>?</kbd></dt><dd>Open this page from anywhere.</dd></div>
       </dl>`)}
 
     ${section('terms', 'Terms', `

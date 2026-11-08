@@ -65,7 +65,6 @@ const state = {
   reasons: [],
   filter: 'queue',
   expandedId: null,
-  cursor: null, // case ID of the row the keyboard is on
   popupPlacement: null,
   reviewer: '',
   drafts: new Map(),
@@ -196,18 +195,6 @@ function renderBento() {
   </section>`;
 }
 
-const kbd = (key) => `<kbd>${key}</kbd>`;
-function renderKeys() {
-  const filters = renderFilters().match(/data-filter=/g).length;
-  return `<footer class="keys" aria-label="Keyboard shortcuts">
-    <span>${kbd('↑')}${kbd('↓')} or ${kbd('J')}${kbd('K')} Move</span>
-    <span>${kbd('↵')} Open review</span>
-    <span>${kbd('Esc')} Close</span>
-    <span>${kbd('1')}–${kbd(String(filters))} Filters</span>
-    <span>${kbd('?')} Help</span>
-  </footer>`;
-}
-
 function renderHead() {
   const items = reviewItems();
   const reviewed = items.filter((item) => item.review).length;
@@ -265,7 +252,7 @@ function renderRow(item) {
   const quote = record.quote_eur === null ? NOT_PROVIDED : `€${record.quote_eur.toLocaleString('en-US')}`;
   const status = record.case_status ? humanize(record.case_status) : NOT_PROVIDED;
 
-  return `<tr class="row${record.case_id === state.cursor ? ' row-active' : ''}" data-row="${id}">
+  return `<tr class="row" data-row="${id}">
     <td class="c-case">${id}</td>
     <td class="c-summary" title="${escapeHtml(record.claim_summary)}">${escapeHtml(record.claim_summary)}</td>
     <td class="c-quote">${quote}</td>
@@ -423,7 +410,7 @@ function renderClaims() {
   const focusedDecision = document.activeElement?.dataset.decision;
   const rows = visibleItems().length;
   dom.page.innerHTML = renderHead() + (state.items.length ? renderBento() : '')
-    + `<section class="card table-card">${renderFilters()}${renderTable()}${rows ? renderKeys() : ''}</section>`
+    + `<section class="card table-card">${renderFilters()}${renderTable()}</section>`
     + '<aside id="rule-tooltip" class="rule-tooltip" popover="manual" role="tooltip"></aside>'
     + (state.expandedId ? renderReviewPopup(findItem(state.expandedId)) : '');
   const popup = dom.page.querySelector('.review-popup');
@@ -669,7 +656,6 @@ function applyPolicies(data) {
 
 function toggleRow(id) {
   state.expandedId = state.expandedId === id ? null : id;
-  state.cursor = id;
   state.popupPlacement = null;
 
   state.error = null;
@@ -1015,36 +1001,6 @@ document.addEventListener('keydown', (event) => {
   const next = event.key === 'Home' ? 0 : event.key === 'End' ? options.length - 1
     : (index + (event.key === 'ArrowDown' ? 1 : -1) + options.length) % options.length;
   options[next].focus({ preventScroll: true });
-});
-
-/* Keyboard: move through claims, open a review, switch filters, open help */
-
-const isTyping = (target) => target?.closest?.('input, textarea, select, [contenteditable="true"], .review-popup, .reason-picker');
-
-function moveCursor(rows, index) {
-  state.cursor = rows[index].dataset.row;
-  rows.forEach((row, n) => row.classList.toggle('row-active', n === index));
-  rows[index].scrollIntoView({ block: 'nearest' });
-}
-
-document.addEventListener('keydown', (event) => {
-  if (event.metaKey || event.ctrlKey || event.altKey || event.defaultPrevented || isTyping(event.target)) return;
-  const { key } = event;
-  if (key === '?') { event.preventDefault(); goToPage('help'); return; }
-  if (state.pageId !== 'claims' || state.expandedId) return;
-  if (/^[1-9]$/.test(key)) {
-    const button = dom.page.querySelectorAll('.table-card .filters button')[Number(key) - 1];
-    if (button) { event.preventDefault(); setFilter(button.dataset.filter); }
-    return;
-  }
-  const rows = [...dom.page.querySelectorAll('.claims [data-row]')];
-  if (!rows.length) return;
-  const index = rows.findIndex((row) => row.dataset.row === state.cursor);
-  if (key === 'ArrowDown' || key === 'j') moveCursor(rows, index < 0 ? 0 : Math.min(rows.length - 1, index + 1));
-  else if (key === 'ArrowUp' || key === 'k') moveCursor(rows, index < 0 ? 0 : Math.max(0, index - 1));
-  else if ((key === 'Enter' || key === 'o') && index >= 0 && !event.target.closest('button, a')) toggleRow(state.cursor);
-  else return;
-  event.preventDefault();
 });
 
 /* Events */
