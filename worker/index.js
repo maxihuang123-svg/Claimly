@@ -1,10 +1,10 @@
 import { Buffer } from 'node:buffer';
 import { DurableObject } from 'cloudflare:workers';
 import { accessGate, spaceOf } from '../calls/access.js';
-import { createApp } from '../handler.js';
+import { createDemoWorkspace } from '../demo-workspace.js';
 import { POLICY_V2 } from '../policies.js';
 import { examplesFrom } from '../validation.js';
-import { ENGINE_VERSION, EXAMPLES_CSV, JUDGE_CASES_CSV } from './generated.js';
+import { ENGINE_VERSION, EXAMPLES_CSV, JUDGE_CASES_CSV, DEMO_CASES_CSV } from './generated.js';
 
 // Cloudflare entry. The Worker checks the access code, serves public/ as static assets and
 // sends /api/* and the claimants' reply forms (/reply/*) to a Durable Object. That object holds the app exactly as server.js does on
@@ -25,6 +25,7 @@ function sqlLog(sql, name) {
   return {
     path: `sqlite:${name}`,
     read: () => sql.exec('SELECT text FROM lines WHERE log = ? ORDER BY id', name).toArray().map((row) => row.text).join(''),
+    clear() { sql.exec('DELETE FROM lines WHERE log = ?', name); },
     append(text) {
       for (let at = 0; at < text.length;) {
         let end = Math.min(at + CHUNK, text.length);
@@ -53,6 +54,7 @@ function sqlImports(sql) {
   return {
     list: () => sql.exec("SELECT DISTINCT log FROM lines WHERE log LIKE 'import:%' ORDER BY log").toArray()
       .map(({ log }) => ({ name: log.slice('import:'.length), text: sqlLog(sql, log).read() })),
+    clear() { sql.exec("DELETE FROM lines WHERE log LIKE 'import:%'"); },
     save(name, text) {
       const log = `import:${name}`;
       if (sql.exec('SELECT 1 FROM lines WHERE log = ? LIMIT 1', log).toArray().length) throw new Error(`Import ${name} already exists.`);
@@ -75,7 +77,7 @@ export class Claims extends DurableObject {
     const seeded = SEEDED.includes(this.ctx.id.name);
     sql.exec('CREATE TABLE IF NOT EXISTS lines (id INTEGER PRIMARY KEY AUTOINCREMENT, log TEXT NOT NULL, text TEXT NOT NULL)');
     sql.exec('CREATE INDEX IF NOT EXISTS lines_by_log ON lines (log, id)');
-    this.app = createApp({
+    this.app = createDemoWorkspace({
       imports: sqlImports(sql),
       documents: sqlDocuments(sql),
       logs: Object.fromEntries(['reviews', 'policies', 'validation', 'outcomes', 'contacts'].map((name) => [name, sqlLog(sql, name)])),
@@ -84,7 +86,7 @@ export class Claims extends DurableObject {
       baseCases: seeded ? JUDGE_CASES_CSV : null,
       startPolicies: seeded ? [POLICY_V2] : [],
       env: seeded ? { ...this.env, EMAIL_DRY_RUN: 'true' } : this.env,
-    });
+    }, DEMO_CASES_CSV);
   }
 
   async fetch(request) {

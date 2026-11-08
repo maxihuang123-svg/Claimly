@@ -68,6 +68,7 @@ const state = {
   reasons: [],
   filter: 'all',
   expandedId: null,
+  detailIds: new Set(),
   popupPlacement: null,
   reviewer: '',
   drafts: new Map(),
@@ -207,6 +208,8 @@ function renderHead() {
     <button type="button" class="link policy-link" data-page="policies">Current policy ${escapeHtml(state.policyVersion)}</button>
     <p class="progress">${progress}</p>
     <button type="button" class="button" data-import ${state.importing ? 'disabled' : ''}>${state.importing ? 'Importing' : 'Import CSV'}</button>
+    <button type="button" class="button" data-batch ${state.batching ? 'disabled' : ''}>${state.batching ? 'Generating batch…' : 'Import CSV → batch results'}</button>
+    <input type="file" id="batch-file" accept=".csv,text/csv" hidden>
     <input type="file" id="file" accept=".csv,text/csv" hidden>
   </div>
   ${state.banner ? `<div class="banner" role="alert"><span>${escapeHtml(state.banner)}</span>
@@ -248,14 +251,41 @@ function renderRow(item) {
   const status = record.case_status ? humanize(record.case_status) : NOT_PROVIDED;
 
   return `<tr class="row" data-row="${id}">
-    <td class="c-case">${id}</td>
+    <td class="c-case"><button type="button" class="link case-expand" data-details="${id}" aria-expanded="${state.detailIds.has(record.case_id)}" aria-controls="case-details-${id}" aria-label="${state.detailIds.has(record.case_id) ? 'Hide' : 'Show'} details for ${id}">${svg('<path d="m6 4 4 4-4 4"/>')}<span>${id}</span></button></td>
     <td class="c-summary" title="${escapeHtml(record.claim_summary)}">${escapeHtml(record.claim_summary)}</td>
     <td class="c-quote">${quote}</td>
     <td class="c-status">${status}</td>
     <td class="c-rec"><span class="pill rule-trigger" tabindex="0" aria-describedby="rule-tooltip" data-rule="${escapeHtml(ruleText)}" data-outcome="${automated.recommendation}">${outcomeName(automated.recommendation)}</span></td>
     <td class="c-why" title="${escapeHtml(automated.explanation)}">${escapeHtml(automated.reason)}</td>
     <td class="c-review">${renderReviewCell(item)}</td>
-  </tr>`;
+  </tr>${renderCaseDetails(item)}`;
+}
+
+function renderCaseDetails(item) {
+  const record = item.case;
+  const id = escapeHtml(record.case_id);
+  const fields = [
+    ['case_status', 'Case status'], ['claim_type', 'Claim type'], ['repair_type', 'Repair type'],
+    ['quote_eur', 'Repair quote'], ['policy_active_on_incident', 'Policy active on incident date'],
+    ['incident_report_present', 'Incident report present'], ['itemized_quote_present', 'Itemized quote present'],
+    ['injury_reported', 'Injury reported'], ['liability_disputed', 'Liability disputed'],
+    ['duplicate_flag', 'Duplicate flag'], ['evidence_conflict', 'Evidence conflict'],
+  ];
+  return `<tr class="case-detail" id="case-details-${id}" ${state.detailIds.has(record.case_id) ? '' : 'hidden'}><td colspan="7">
+    <section class="case-detail-body" aria-label="Details for ${id}">
+      <h2>Case details · ${id}</h2>
+      <p class="case-full-summary">${escapeHtml(record.claim_summary || NOT_PROVIDED)}</p>
+      <dl class="case-facts">${fields.map(([key, label]) => {
+        const value = record[key];
+        const missing = value === null || value === undefined || value === '';
+        const formatted = missing ? NOT_PROVIDED : typeof value === 'boolean' ? (value ? 'Yes' : 'No')
+          : key === 'quote_eur' ? `€${value.toLocaleString('en-US')}` : humanize(value);
+        return `<div><dt>${label}</dt><dd${missing ? ' class="not-provided"' : ''}>${escapeHtml(formatted)}</dd></div>`;
+      }).join('')}</dl>
+      <p class="notice"><strong>Recommendation:</strong> ${escapeHtml(item.automated.explanation)} · Policy ${escapeHtml(item.automated.policy_version)}</p>
+      <button type="button" class="button" data-toggle="${id}">Review decision</button>
+    </section>
+  </td></tr>`;
 }
 
 const formatTime = (iso) => new Date(iso).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
@@ -658,7 +688,7 @@ function toggleRow(id) {
 function positionReviewPopup() {
   const popup = dom.page.querySelector('.review-popup');
   const anchor = [...dom.page.querySelectorAll('[data-toggle]')]
-    .find((button) => button.dataset.toggle === state.expandedId);
+    .find((button) => button.dataset.toggle === state.expandedId && button.getClientRects().length);
   if (!popup || !anchor) return;
   if (state.popupPlacement?.id === state.expandedId) {
     Object.assign(popup.style, state.popupPlacement.style);
@@ -805,6 +835,36 @@ async function importFile(file) {
   }
   state.importing = false;
   render();
+}
+
+async function batchFile(file) {
+  state.batching = true;
+  state.banner = null;
+  render();
+  try {
+    if (file.size > 5 * 1024 * 1024) throw new Error('That file is too large. The limit is 5 MB.');
+    const response = await fetch('/api/batch', {
+      method: 'POST', headers: { 'Content-Type': 'text/csv' }, body: await file.text(),
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error ?? 'Could not generate batch results. Try again.');
+    }
+    const url = URL.createObjectURL(await response.blob());
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${file.name.replace(/\.csv$/i, '')}-results.csv`;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    showToast('Batch results downloaded. Evaluated under v1 and v2.');
+  } catch (error) {
+    state.banner = `${file.name}: ${error.message}`;
+  } finally {
+    state.batching = false;
+    render();
+  }
 }
 
 function saveDraftNow() {
@@ -1021,6 +1081,15 @@ document.addEventListener('click', (event) => {
       }
     }
     else if (filter) setFilter(filter);
+    else if ('details' in button.dataset) {
+      const id = button.dataset.details;
+      if (state.detailIds.has(id)) state.detailIds.delete(id);
+      else state.detailIds.add(id);
+      const expanded = state.detailIds.has(id);
+      button.setAttribute('aria-expanded', String(expanded));
+      button.setAttribute('aria-label', `${expanded ? 'Hide' : 'Show'} details for ${id}`);
+      document.getElementById(`case-details-${id}`).hidden = !expanded;
+    }
     else if (toggle) toggleRow(toggle);
     else if ('reasonMenu' in button.dataset) toggleReasonMenu();
     else if (button.dataset.reason) setReason(button.dataset.reason);
@@ -1030,6 +1099,7 @@ document.addEventListener('click', (event) => {
     else if ('change' in button.dataset) setChanging(true);
     else if ('cancelChange' in button.dataset) setChanging(false);
     else if ('save' in button.dataset) saveChange();
+    else if ('batch' in button.dataset) document.getElementById('batch-file').click();
     else if ('import' in button.dataset) document.getElementById('file').click();
     else if ('dismiss' in button.dataset) { state.banner = null; render(); }
     else if ('retry' in button.dataset) start();
@@ -1041,6 +1111,11 @@ document.addEventListener('click', (event) => {
 dom.page.addEventListener('change', (event) => {
   if (event.target.dataset.choice) { toggleChoice(event.target); return; }
   if (event.target.id === 'reason') { setReason(event.target.value); return; }
+  if (event.target.id === 'batch-file') {
+    const [file] = event.target.files;
+    if (file) batchFile(file);
+    return;
+  }
   if (event.target.id !== 'file') return;
   const [file] = event.target.files;
   if (file) importFile(file);
@@ -1108,3 +1183,23 @@ const labelsUI = createLabelsUI({
 window.addEventListener('beforeunload', (event) => { if (labelsUI.dirty()) event.preventDefault(); });
 
 start();
+
+
+// Help's reset action is explicit about replacing the current workspace.
+dom.page.addEventListener('click', async (event) => {
+  const button = event.target.closest('[data-prepare-demo]');
+  if (!button) return;
+  if (!confirm('Prepare for demo? Replace this workspace’s claims and history with the original practice cases, policies v1/v2 and fresh validation results.')) return;
+  const status = dom.page.querySelector('[data-demo-status]');
+  button.disabled = true;
+  status.textContent = 'Preparing demo…';
+  try {
+    const response = await fetch('/api/demo/prepare', { method: 'POST' });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Demo preparation failed.');
+    location.reload();
+  } catch (error) {
+    status.textContent = `${error.message} Please try again.`;
+    button.disabled = false;
+  }
+});

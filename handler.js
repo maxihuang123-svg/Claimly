@@ -1,3 +1,4 @@
+import { batchResults, resultsCsv } from './batch-results.js';
 import { readText, TooLarge } from './body.js';
 import { createCallApi } from './calls/api.js';
 import { ContactLog } from './calls/contacts.js';
@@ -32,7 +33,8 @@ export function createApp({ logs, imports, documents = null, baseCases = null, s
   const outcomes = new OutcomeStore(logs.outcomes);
   // Released as an approved change would be: open base cases whose next step changes are flagged for a recheck.
   if (startPolicies.length && policies.versions.length === 1 && !policies.draft) {
-    const base = baseCases === null ? [] : parseCaseFile(baseCases, policies.original);
+    const base = [...(baseCases === null ? [] : parseCaseFile(baseCases, policies.original)),
+      ...imports.list().flatMap(({ text }) => parseCaseFile(text, policies.original))];
     for (const policy of startPolicies) {
       const recheck = base.filter((item) => item.case.case_status === 'open'
         && evaluate(item.case, policy).recommendation !== item.automated.recommendation).map((item) => item.case.case_id);
@@ -208,6 +210,16 @@ export function createApp({ logs, imports, documents = null, baseCases = null, s
       return json({ saved: true }, 201);
     }
     if (key === 'GET /api/cases') return json(casesPayload());
+    if (key === 'POST /api/batch') {
+      const rows = batchResults(await readBody(request, MAX_CSV_BYTES));
+      return new Response(resultsCsv(rows), {
+        headers: {
+          'Content-Type': 'text/csv; charset=utf-8',
+          'Content-Disposition': 'attachment; filename="results.csv"',
+          'Cache-Control': 'no-store',
+        },
+      });
+    }
     if (key === 'POST /api/import') {
       const { summary, changed } = importCases(await readBody(request, MAX_CSV_BYTES));
       const emailed = (await email.sendAfterImport(changed, url.origin)).filter((contact) => !contact.error).length;

@@ -139,7 +139,7 @@ button { cursor: pointer; background: none; border: 0; padding: 0; text-align: l
 }
 .button:hover { background: var(--hover); }
 .button:disabled { cursor: progress; color: var(--ink-3); }
-.page-head .button { margin-left: auto; }
+.page-head .button[data-import] { margin-left: auto; }
 
 .banner {
   display: flex;
@@ -1074,4 +1074,23 @@ kbd + kbd { margin-left: 3px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .meter span, .card-link svg, .nav button, .mix-legend button { transition: none; }
+}
+
+/* Inline case inspection */
+.case-expand { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; font: inherit; }
+.case-expand svg { width: 12px; height: 12px; flex: none; }
+.case-expand[aria-expanded="true"] svg { transform: rotate(90deg); }
+.case-expand span { overflow: hidden; text-overflow: ellipsis; }
+.case-detail[hidden] { display: none; }
+.case-detail > td { padding: 0; border-bottom: 1px solid var(--line); white-space: normal; }
+.case-detail-body { padding: 20px; background: var(--sunken); overflow-wrap: anywhere; }
+.case-detail-body h2 { margin: 0 0 8px; font-size: 15px; }
+.case-full-summary { max-width: 75ch; margin: 0 0 20px; }
+.case-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px 24px; margin: 0 0 20px; }
+.case-facts dt { color: var(--ink-2); font-size: 12px; }
+.case-facts dd { margin: 4px 0 0; font-size: 13px; font-weight: 500; }
+.case-detail-body > .notice { max-width: 75ch; margin-bottom: 16px; }
+@media (max-width: 720px) {
+  .case-detail-body { padding: 16px 12px; }
+  .case-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 }

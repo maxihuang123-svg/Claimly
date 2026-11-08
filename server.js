@@ -5,7 +5,7 @@ import { Readable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import { accessGate } from './calls/access.js';
 import { readEnv } from './env.js';
-import { createApp } from './handler.js';
+import { createDemoWorkspace } from './demo-workspace.js';
 import { fileDocuments, fileImports } from './storage.js';
 import { hash } from './validation.js';
 
@@ -36,7 +36,7 @@ const STATIC_FILES = {
   '/tour.css': ['tour.css', 'text/css; charset=utf-8'],
 };
 
-const app = createApp({
+const app = createDemoWorkspace({
   baseCases: existsSync(casesPath) ? readFileSync(casesPath, 'utf8') : null,
   imports: fileImports(dataPath('imports', 'IMPORTS_DIR')),
   documents: fileDocuments(dataPath('documents', 'DOCUMENTS_DIR')),
@@ -49,7 +49,7 @@ const app = createApp({
   },
   engineVersion: hash(['engine.js', 'cases.js', 'validation.js'].map((file) => readFileSync(join(root, file), 'utf8'))),
   env,
-});
+}, readFileSync(join(root, 'demo/practice_cases.csv'), 'utf8'));
 const gate = accessGate(env.ACCESS_CODE);
 
 // The body stays a stream: each route reads it with its own size limit (body.js).
@@ -76,6 +76,11 @@ async function route(incoming, response) {
   if (denied) return send(response, denied);
 
   const { pathname } = new URL(request.url);
+  if (request.method === 'GET' && pathname === '/api/space') {
+    return send(response, new Response(JSON.stringify({ space: 'local' }), {
+      headers: { 'Content-Type': 'application/json' },
+    }));
+  }
   if (request.method === 'GET' && STATIC_FILES[pathname]) {
     const [file, type] = STATIC_FILES[pathname];
     response.writeHead(200, { 'Content-Type': type, 'Cache-Control': 'no-cache' });

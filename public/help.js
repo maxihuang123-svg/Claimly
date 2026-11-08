@@ -124,5 +124,10 @@ export function renderHelp({ container, outcomes, reasons, policyVersion, counts
 
     ${section('problems', 'Problems or questions', `
       <p>Something looks wrong? Write down the case ID, what you saw and what you expected. ${contact}</p>`)}
+    ${section('demo', 'Demo setup', `
+      <p>Restore the 12 original practice claims and policies v1 and v2, activate v2, and rerun validation. Changed open claims will await recheck; closed claims remain historical examples.</p>
+      <p>This replaces this workspace’s imports, reviews, policy changes, validation runs, outcomes and contact history. Demo emails are simulated.</p>
+      <p><button type="button" class="button" data-prepare-demo>Prepare for demo</button></p>
+      <p data-demo-status role="status" aria-live="polite"></p>`)}
   </div>`;
 }

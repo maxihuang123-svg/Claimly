@@ -129,3 +129,25 @@ test('the before-and-after report scores v2 against the answers the change notic
   assert.equal(affected.after.correct.count, affected.after.correct.total);
   assert.equal(all.after.unnecessary_human.count, 0);
 });
+
+test('website batch download matches the CLI format without importing claims', async () => {
+  const { batchResults, resultsCsv } = await import('../batch.js');
+  const app = appIn(mkdtempSync(join(tmpdir(), 'handler-batch-')));
+  const response = await post(app, '/api/batch', practice, 'text/csv');
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get('Content-Type'), /^text\/csv/);
+  assert.equal(response.headers.get('Content-Disposition'), 'attachment; filename="results.csv"');
+  assert.equal(await response.text(), resultsCsv(batchResults(practice)));
+  assert.equal(app.items.size, 0);
+});
+
+test('website batch rejects invalid and oversized CSV files without importing claims', async () => {
+  const app = appIn(mkdtempSync(join(tmpdir(), 'handler-batch-')));
+  const invalid = await post(app, '/api/batch', 'wrong_column\nvalue\n', 'text/csv');
+  assert.equal(invalid.status, 400);
+  assert.ok((await invalid.json()).error);
+  const oversized = await post(app, '/api/batch', 'x'.repeat(5 * 1024 * 1024 + 1), 'text/csv');
+  assert.equal(oversized.status, 400);
+  assert.match((await oversized.json()).error, /5 MB/);
+  assert.equal(app.items.size, 0);
+});

@@ -13,6 +13,8 @@ npm run batch -- claims.csv results.csv
 # or: node batch.js claims.csv results.csv
 ```
 
+On the website, use **Import CSV → batch results** on Claims review or All claims to upload a CSV and download `<filename>-results.csv`. This uses the same v1/v2 batch converter without adding claims to the review queue. The file limit is 5 MB.
+
 `claims.csv` is in the provided case format. `results.csv` gets the columns `case_id, recommendation_v1,
 recommendation_v2, needs_recheck, rule_v1, rule_v2, explanation`.
 

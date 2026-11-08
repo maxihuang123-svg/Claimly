@@ -1,4 +1,4 @@
-import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 // Every store is an append-only log of JSON lines: it reads the whole log once, then
@@ -9,6 +9,10 @@ export function fileLog(path) {
   return {
     path,
     read: () => (existsSync(path) ? readFileSync(path, 'utf8') : ''),
+    clear() {
+      mkdirSync(dirname(path), { recursive: true });
+      writeFileSync(path, '');
+    },
     append(text) {
       mkdirSync(dirname(path), { recursive: true });
       appendFileSync(path, text);
@@ -27,6 +31,9 @@ export function fileImports(dir) {
       ? readdirSync(dir).filter((name) => name.endsWith('.csv')).sort()
         .map((name) => ({ name, text: readFileSync(join(dir, name), 'utf8') }))
       : []),
+    clear() {
+      if (existsSync(dir)) for (const name of readdirSync(dir).filter((name) => name.endsWith('.csv'))) rmSync(join(dir, name));
+    },
     save(name, text) {
       mkdirSync(dir, { recursive: true });
       writeFileSync(join(dir, name), text, { flag: 'wx' }); // never overwrite an earlier import
