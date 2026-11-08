@@ -1,5 +1,9 @@
 # Claimly
 
+### [Open the Claimly website →](https://claimly.maxi-huang1234.workers.dev)
+
+The live app requires an access code. Judges receive their access link with our submission.
+
 Trustworthy motor claims triage: every claim gets an explainable next step under a versioned written policy, a person
 decides wherever it matters, and when the rules change Claimly shows exactly which open claims need another look.
 Built for the Taktile case at thinc! Munich 2026.
