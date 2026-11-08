@@ -21,7 +21,7 @@ class_name = "Claims"
 tag = "v1"
 new_sqlite_classes = ["Claims"]
 
-# Not secret. ELEVENLABS_API_KEY, ACCESS_CODE, JUDGE_CODE, RESEND_API_KEY and CLAIMANT_EMAIL are secrets: `npx wrangler secret put <NAME>`.
+# Not secret. ELEVENLABS_API_KEY, ACCESS_CODE, JUDGE_CODE, DEMO_CODE, RESEND_API_KEY and CLAIMANT_EMAIL are secrets: `npx wrangler secret put <NAME>`.
 # For `npm run dev:worker`, put them in .dev.vars (git-ignored), as KEY=value lines.
 [vars]
 ELEVENLABS_AGENT_ID = "agent_7401m6v4zp3yftpt1vker4ynx4sh"

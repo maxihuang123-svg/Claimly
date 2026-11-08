@@ -1008,6 +1008,10 @@ document.addEventListener('keydown', (event) => {
 
 document.addEventListener('click', (event) => {
   const button = event.target.closest('button');
+  if (button && 'demoReset' in button.dataset) {
+    resetDemo(button);
+    return;
+  }
   if (button && 'tourStart' in button.dataset) {
     startTour({ goToPage, currentPage: () => state.pageId });
     return;
@@ -1063,7 +1067,24 @@ dom.page.addEventListener('input', (event) => {
 
 /* Start */
 
+// Only the demo copy on Cloudflare answers with space 'demo'; elsewhere the button stays hidden.
+async function showDemoReset() {
+  try {
+    const { space } = await (await fetch('/api/space')).json();
+    document.querySelector('[data-demo-reset]').hidden = space !== 'demo';
+  } catch { /* not on Cloudflare */ }
+}
+
+async function resetDemo(button) {
+  if (!confirm('Reset the demo copy? Every call, email, review and policy change made here is removed.')) return;
+  button.disabled = true;
+  const response = await fetch('/api/demo/reset', { method: 'POST' });
+  if (response.ok) location.reload();
+  else button.disabled = false;
+}
+
 async function start() {
+  showDemoReset();
   state.status = 'loading';
   render();
   try {

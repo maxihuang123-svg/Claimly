@@ -38,6 +38,7 @@
   color: var(--ink-2);
   font-weight: 500;
 }
+.tour-start[hidden] { display: none; }
 .tour-start:hover { background: rgb(13 15 20 / 0.045); color: var(--ink); }
 .tour-start svg { width: 16px; height: 16px; color: var(--ink-3); }
 

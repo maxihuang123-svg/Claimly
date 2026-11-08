@@ -20,6 +20,8 @@ npx wrangler secret put ELEVENLABS_API_KEY
 npx wrangler secret put ACCESS_CODE        # optional, but use it: the URL is public
 npx wrangler secret put RESEND_API_KEY     # optional: emails claimants (calls/README.md)
 npx wrangler secret put CLAIMANT_EMAIL
+npx wrangler secret put JUDGE_CODE         # optional: a separate copy of the data for the jury
+npx wrangler secret put DEMO_CODE          # optional: a resettable copy for testing and recording
 npm run deploy
 ```
 
@@ -37,6 +39,9 @@ With `JUDGE_CODE` set, that code opens a second Durable Object ("judges") with i
 `test/practice_cases.csv` and `demo/voice_demo_cases.csv`, emails there are recorded but not sent, and the team resets it
 with `POST /api/admin/reset-judges` (team cookie only). The code is shared, so every deploy updates both copies.
 A link like `https://<worker>/?code=<code>` logs in with one click.
+
+`DEMO_CODE` opens a third copy ("demo") that starts the same way. Its sidebar has a **Reset demo** button that
+puts it back to the start, so every test or recording begins with the same claims.
 
 ## Limits
 

@@ -11,9 +11,11 @@ import { ENGINE_VERSION, EXAMPLES_CSV, JUDGE_CASES_CSV } from './generated.js';
 // Node: it replays every log into memory once, then appends. Its SQLite storage replaces the
 // files under data/, and because it is a single instance, reads and writes stay consistent.
 //
-// There are two objects, two separate copies of the data: "main" for the team (ACCESS_CODE) and "judges"
-// for the jury (JUDGE_CODE). The code is the same for both. The judges' copy starts from the practice and
-// demo claims with policy v2 already released, only pretends to send emails, and can be reset by the team (POST /api/admin/reset-judges).
+// Each copy of the data is its own object, opened by its own code: "main" for the team (ACCESS_CODE), "judges"
+// for the jury (JUDGE_CODE) and "demo" for testing and recording (DEMO_CODE). The code is the same for all.
+// The judges' and demo copies start from the practice and demo claims with policy v2 already released, and
+// only pretend to send emails. The team resets the judges' copy (POST /api/admin/reset-judges); anyone in the
+// demo copy resets it with its Reset demo button (POST /api/demo/reset), so every take starts the same.
 
 const CHUNK = 500_000; // characters per row, well under the 2 MB limit for one SQLite value
 
@@ -59,7 +61,8 @@ function sqlImports(sql) {
   };
 }
 
-const codes = (env) => ({ main: env.ACCESS_CODE, judges: env.JUDGE_CODE });
+const codes = (env) => ({ main: env.ACCESS_CODE, judges: env.JUDGE_CODE, demo: env.DEMO_CODE });
+const SEEDED = ['judges', 'demo'];
 
 export class Claims extends DurableObject {
   constructor(ctx, env) {
@@ -69,7 +72,7 @@ export class Claims extends DurableObject {
 
   open() {
     const { sql } = this.ctx.storage;
-    const judges = this.ctx.id.name === 'judges';
+    const seeded = SEEDED.includes(this.ctx.id.name);
     sql.exec('CREATE TABLE IF NOT EXISTS lines (id INTEGER PRIMARY KEY AUTOINCREMENT, log TEXT NOT NULL, text TEXT NOT NULL)');
     sql.exec('CREATE INDEX IF NOT EXISTS lines_by_log ON lines (log, id)');
     this.app = createApp({
@@ -78,9 +81,9 @@ export class Claims extends DurableObject {
       logs: Object.fromEntries(['reviews', 'policies', 'validation', 'outcomes', 'contacts'].map((name) => [name, sqlLog(sql, name)])),
       engineVersion: ENGINE_VERSION,
       examples: examplesFrom(EXAMPLES_CSV),
-      baseCases: judges ? JUDGE_CASES_CSV : null,
-      startPolicies: judges ? [POLICY_V2] : [],
-      env: judges ? { ...this.env, EMAIL_DRY_RUN: 'true' } : this.env,
+      baseCases: seeded ? JUDGE_CASES_CSV : null,
+      startPolicies: seeded ? [POLICY_V2] : [],
+      env: seeded ? { ...this.env, EMAIL_DRY_RUN: 'true' } : this.env,
     });
   }
 
@@ -117,6 +120,14 @@ export default {
 
     // A claimant opening a reply link has no cookie: those links come from the team's copy.
     const space = spaceOf(request.headers.get('cookie'), codes(env)) ?? 'main';
+    // Which copy this is, so the page can show the demo copy's Reset demo button.
+    if (request.method === 'GET' && pathname === '/api/space') {
+      return new Response(JSON.stringify({ space }), { headers: { 'Content-Type': 'application/json' } });
+    }
+    if (request.method === 'POST' && pathname === '/api/demo/reset') {
+      if (space !== 'demo') return new Response(JSON.stringify({ error: 'Only the demo copy can be reset here.' }), { status: 403 });
+      return copy('demo').fetch(new Request('https://claimly.internal/__reset', { method: 'POST' }));
+    }
     if (request.method === 'POST' && pathname === '/api/admin/reset-judges') {
       if (space !== 'main') return new Response(JSON.stringify({ error: 'Only the team can reset the judges\' copy.' }), { status: 403 });
       return copy('judges').fetch(new Request('https://claimly.internal/__reset', { method: 'POST' }));
