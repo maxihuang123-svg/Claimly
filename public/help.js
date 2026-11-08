@@ -42,8 +42,8 @@ const REASON_GUIDE = {
 
 const OUTCOME_GUIDE = {
   routine_processing: 'Every check passed. The claim goes to normal processing without a full review.',
-  request_information: 'Something needed for a decision is missing, such as an incident report or an itemized quote. The claim appears under Missing information.',
-  human_review: 'A check found a risk, for example an injury, disputed liability, a possible duplicate, a quote above the limit or a policy that was not active. A person decides.',
+  request_information: 'Something needed for a decision is missing, such as an incident report, an itemized quote or a blank field like the repair type. The claim appears under Missing information.',
+  human_review: 'A check found a risk, for example an injury, disputed liability, a possible duplicate, conflicting evidence, a quote above the limit or a policy that was not active. A person decides.',
 };
 
 const GLOSSARY = [
@@ -121,14 +121,15 @@ export function renderHelp({ container, outcomes, reasons, policyVersion, counts
       <dl class="help-reasons">${reasons.map((reason) => `<div><dt>${escapeHtml(reason.label)}</dt><dd>${escapeHtml(REASON_GUIDE[reason.code] ?? '')}</dd></div>`).join('')}</dl>`)}
 
     ${section('missing', 'Missing information', `
-      <p>Claims sent to ${pill('request_information')} are listed on <button type="button" class="link" data-page="calls">Missing information</button>, with what exactly is missing. You can contact the claimant from there.</p>
-      <p>When a missing fact is filled in, the rules run again and the claim moves to its new next step. If the claimant mentions something new, verify it before changing any fact on the claim.</p>`)}
+      <p>Claims sent to ${pill('request_information')} are listed on <button type="button" class="link" data-page="calls">Missing information</button>, with what exactly is missing.</p>
+      <p>Claimly asks the claimant for exactly that. When a file is imported, it emails each claimant a link to a short form. From the claim you can also send the email again or start a call with the voice assistant. A clear answer on the form or the call, such as the repair type or an uploaded document, is written to the claim, the rules run again and the claim moves to its new next step without anyone touching it.</p>
+      <p>Anything else the claimant says or types is kept as a note on the claim. If it is something new, verify it before changing any fact on the claim.</p>`)}
 
     ${section('policy', 'When the policy changes', `
       <ol class="help-steps">
         <li><strong>Draft.</strong> On Policies, <em>Edit policy</em> starts a draft of the next version. The current policy keeps running.</li>
         <li><strong>Check the impact.</strong> <em>Review draft</em> opens Validation, which shows every claim whose next step would change, and how the draft scores on the test examples.</li>
-        <li><strong>Activate.</strong> Once you are satisfied, put the draft into use from Validation.</li>
+        <li><strong>Activate.</strong> Once you are satisfied, enter your name under <em>Approved by</em> on Validation and click <em>Activate draft</em>.</li>
         <li><strong>Recheck.</strong> Open claims whose outcome changes appear under the <em>Policy recheck</em> filter on Claims review and need a review again.</li>
       </ol>
       <p class="help-note">Closed claims keep the policy they were decided under, so history never changes after the fact.</p>`)}
